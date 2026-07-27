@@ -113,7 +113,7 @@ pieces `update` is made of rather than working around it:
 
 ```python
 installation = require_updatable(config)  # refuses a checkout, costs nothing
-result = check(config)                    # network, environment still intact
+result = check(config)  # network, environment still intact
 notes = changelog(config, result.current, result.latest)
 install_release(config, result, installation)
 print(notes)
