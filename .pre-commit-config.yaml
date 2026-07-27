@@ -84,6 +84,9 @@ repos:
       - id: markdownlint
         args: [--fix]
         stages: [pre-commit]
+        # semantic-release regenerates CHANGELOG.md from its own template, so
+        # reformatting it here is churn that comes back at the next release.
+        exclude: ^CHANGELOG\.md$
 
   # Shell script validation
   - repo: https://github.com/koalaman/shellcheck-precommit
