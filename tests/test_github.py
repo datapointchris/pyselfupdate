@@ -15,6 +15,7 @@ from http.server import HTTPServer
 
 import pytest
 
+from pyselfupdate.config import Config
 from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.errors import SourceError
 from pyselfupdate.github import GitHubSource
@@ -106,6 +107,64 @@ def test_reads_a_token_from_the_environment(server: Recorder, monkeypatch: pytes
     source().latest_release()
 
     assert server.requests[0][1]['authorization'] == 'Bearer from-env'
+
+
+def test_token_func_supplies_a_token_when_nothing_else_does(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv('GITHUB_TOKEN', raising=False)
+    monkeypatch.delenv('GH_TOKEN', raising=False)
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+
+    source(token_func=lambda: 'from-func').latest_release()
+
+    assert server.requests[0][1]['authorization'] == 'Bearer from-func'
+
+
+@pytest.mark.parametrize(
+    ('token', 'environment'),
+    [
+        ('explicit', {}),
+        ('', {'GH_TOKEN': 'from-env'}),
+        ('', {'GITHUB_TOKEN': 'from-env'}),
+    ],
+)
+def test_token_func_is_the_last_resort(server: Recorder, monkeypatch: pytest.MonkeyPatch, token: str, environment: dict[str, str]) -> None:
+    """A caller that already has a credential must never pay for the expensive one."""
+    monkeypatch.delenv('GITHUB_TOKEN', raising=False)
+    monkeypatch.delenv('GH_TOKEN', raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+
+    calls = 0
+
+    def expensive() -> str:
+        nonlocal calls
+        calls += 1
+        return 'from-func'
+
+    source(token=token, token_func=expensive).latest_release()
+
+    assert calls == 0
+    assert server.requests[0][1]['authorization'] != 'Bearer from-func'
+
+
+def test_building_a_config_does_not_call_token_func() -> None:
+    """The point of token_func is that it is not called until a request is made.
+
+    The notify gate resolves a Config on every invocation and declines most of
+    them without reaching the network; a subprocess in front of that gate is the
+    entire cost the field exists to avoid.
+    """
+    calls = 0
+
+    def expensive() -> str:
+        nonlocal calls
+        calls += 1
+        return ''
+
+    Config(tool='demo', owner='datapointchris', version='1.0.0', token_func=expensive).resolved()
+
+    assert calls == 0
 
 
 def test_github_token_outranks_gh_token(monkeypatch: pytest.MonkeyPatch) -> None:

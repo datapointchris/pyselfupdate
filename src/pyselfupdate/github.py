@@ -11,6 +11,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -44,6 +45,17 @@ class GitHubSource:
     owner: str
     repo: str
     token: str = ''
+
+    # Resolves a token when `token` is empty and neither environment variable is
+    # set. Called only when a request is actually about to be made.
+    #
+    # It exists because a credential can be expensive to obtain -- a keychain
+    # prompt, a `gh auth token` subprocess -- and a caller that resolves such a
+    # token eagerly into `token` pays for it on every invocation, including the
+    # ones where the notify gate declines to check at all. That gate is
+    # otherwise free, and a subprocess spawn in front of it is the entire cost.
+    token_func: Callable[[], str] | None = None
+
     timeout: float = DEFAULT_TIMEOUT
     allow_prerelease: bool = False
 
@@ -135,7 +147,7 @@ class GitHubSource:
         request.add_header('Accept', 'application/vnd.github+json')
         request.add_header('X-GitHub-Api-Version', '2022-11-28')
         request.add_header('User-Agent', 'pyselfupdate')
-        token = self.token or token_from_env()
+        token = self.token or token_from_env() or (self.token_func() if self.token_func else '')
         if token:
             request.add_header('Authorization', f'Bearer {token}')
         for name, value in self.headers.items():

@@ -128,7 +128,8 @@ Config(
     repo='mytool',  # defaults to tool
     package='mytool',  # distribution name, defaults to tool
     version='1.2.3',  # defaults to the installed distribution's metadata
-    token='',  # defaults to $GITHUB_TOKEN, then $GH_TOKEN
+    token='',  # defaults to $GITHUB_TOKEN, then $GH_TOKEN, then token_func
+    token_func=None,  # called only when a request is made; for a credential that costs a subprocess
     tag_prefix='',  # e.g. 'cli/' for tags like cli/v1.2.3
     allow_prerelease=False,
     source=None,  # a custom Source; anything with latest_release()
@@ -138,6 +139,23 @@ Config(
 Without a token, GitHub allows 60 API requests per hour per IP and rejects
 private repositories outright. One check per day per tool is far inside that; a
 shared egress address is not.
+
+A private repository therefore needs a real token, and the usual source is the
+`gh` CLI. Pass it as `token_func`, not `token`:
+
+```python
+def gh_token() -> str:
+    result = subprocess.run(['gh', 'auth', 'token'], capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else ''
+
+
+Config(tool='mytool', owner='you', token_func=gh_token)
+```
+
+`token_func` is called only when a request is actually about to be made.
+Resolving the token eagerly into `token` instead puts that subprocess in front
+of every invocation of your CLI — including the overwhelming majority where the
+notify gate declines to check at all, which is otherwise free.
 
 ## State
 

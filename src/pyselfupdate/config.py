@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -38,6 +39,13 @@ class Config:
     version: str = ''
 
     token: str = ''
+
+    # Resolves a token when `token` is empty and neither $GITHUB_TOKEN nor
+    # $GH_TOKEN is set. Called only when a request is about to be made, so a
+    # credential that costs a `gh auth token` subprocess is not paid for on the
+    # invocations where the notify gate declines to check.
+    token_func: Callable[[], str] | None = None
+
     timeout: float = DEFAULT_TIMEOUT
     allow_prerelease: bool = False
 
@@ -79,6 +87,7 @@ class Config:
                 owner=owner,
                 repo=repo,
                 token=self.token,
+                token_func=self.token_func,
                 timeout=self.timeout,
                 allow_prerelease=self.allow_prerelease,
                 tag_prefix=self.tag_prefix,
@@ -92,6 +101,7 @@ class Config:
             package=package,
             version=self.version or current_version(package),
             token=self.token,
+            token_func=self.token_func,
             timeout=self.timeout,
             allow_prerelease=self.allow_prerelease,
             tag_prefix=self.tag_prefix,
