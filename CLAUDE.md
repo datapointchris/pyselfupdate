@@ -9,14 +9,16 @@ public API, the README and the docstrings as the product — a change that is
 merely convenient for the internal consumers is not automatically right.
 
 It is the Python sibling of `~/tools/goselfupdate` and `~/tools/bashselfupdate`.
-The three deliberately share conventions, the state-file schema and the
-environment-variable contract. They do **not** share an API, because "update"
+The three deliberately share conventions and version precedence. The state-file
+schema and the environment-variable contract are shared with the sibling that
+also has a notify layer; **goselfupdate does not have one yet**, so today it
+implements the update half only. They do **not** share an API, because "update"
 means three different operations — see "Why the API differs from goselfupdate".
 
 ## Layout
 
 | Path | Holds |
-|---|---|
+| --- | --- |
 | `version.py` | Semantic version comparison, replacing `packaging` |
 | `source.py` | The `Source` protocol and `Release` |
 | `github.py` | `GitHubSource`, over `urllib` |
