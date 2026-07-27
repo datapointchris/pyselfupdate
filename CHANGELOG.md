@@ -1,6 +1,39 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-07-27)
+
+### Bug Fixes
+
+- Do every fallible step before the install, then exit
+  ([`14c6c69`](https://github.com/datapointchris/pyselfupdate/commit/14c6c6967dd6960841726d3d2b3fa64828f3b81f))
+
+syncer 4.0.0's own update command crashed immediately after a successful upgrade: it fetched its
+  changelog with httpx once uv had already rewritten the virtual environment underneath it, and
+  httpx's lazy import of httpcore resolved against a directory where 4.3.0 had just dropped that
+  dependency. The upgrade was fine; the process reporting on it was not.
+
+run_update had the same shape. It fetched the changelog after installing, and the comment claiming
+  the process ends there only flushed stdout before returning into typer. github.py uses urllib, so
+  the fetch survives today, but a custom Source is public API and nothing stops one importing httpx.
+
+Everything that touches the network or imports now happens before the install, and exit_now ends the
+  process without unwinding through click's error handling or interpreter shutdown, both of which
+  may import.
+
+update() is unchanged for callers; it is now the composition of require_updatable, check and
+  install_release, which is what lets run_update slot the changelog fetch between the second and
+  third.
+
+### Chores
+
+- Keep markdownlint off the generated changelog
+  ([`dc47b15`](https://github.com/datapointchris/pyselfupdate/commit/dc47b1592713238aaebff5d90a09fb58971a45f8))
+
+semantic-release writes CHANGELOG.md from its own template, blank lines and all, so --fix rewrites
+  it on every --all-files run and the change comes straight back at the next release.
+
+
 ## v0.2.0 (2026-07-27)
 
 ### Documentation
