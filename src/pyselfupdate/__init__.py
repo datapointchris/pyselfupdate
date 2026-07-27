@@ -28,6 +28,7 @@ from pyselfupdate.errors import SourceError
 from pyselfupdate.github import GitHubSource
 from pyselfupdate.install import Installation
 from pyselfupdate.install import InstallKind
+from pyselfupdate.install import exit_now
 from pyselfupdate.install import read_installation
 from pyselfupdate.notifier import Outcome
 from pyselfupdate.notifier import Skip
@@ -40,6 +41,8 @@ from pyselfupdate.state import read as read_state
 from pyselfupdate.updater import Result
 from pyselfupdate.updater import changelog
 from pyselfupdate.updater import check
+from pyselfupdate.updater import install_release
+from pyselfupdate.updater import require_updatable
 from pyselfupdate.updater import update
 from pyselfupdate.updater import update_and_reexec
 
@@ -64,9 +67,12 @@ __all__ = [
     'changelog',
     'check',
     'enabled',
+    'exit_now',
+    'install_release',
     'notify',
     'read_installation',
     'read_state',
+    'require_updatable',
     'update',
     'update_and_reexec',
 ]

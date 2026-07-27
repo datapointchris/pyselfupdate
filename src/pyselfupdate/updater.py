@@ -55,18 +55,27 @@ def check(config: Config) -> Result:
     return Result(current=current, latest=latest, release=release)
 
 
-def update(config: Config, *, quiet: bool = True) -> Result:
-    """Install the latest release over the running one.
+def require_updatable(config: Config) -> Installation:
+    """The installation an update would rewrite, refusing one that must not be.
 
-    A no-op returning `applied=False` when already current. Note that on
-    success the running interpreter's environment has been rewritten underneath
-    it -- see `pyselfupdate.install.reexec`.
+    Public because it is the only part of an update that costs nothing and can
+    still refuse outright. A caller that orders the steps itself -- as
+    `typercmd.run_update` does, to fetch a changelog while the environment is
+    still intact -- keeps the refusal ahead of the network by starting here.
     """
-    resolved = config.resolved()
-    installation = read_installation(resolved.tool)
+    installation = read_installation(config.resolved().tool)
     _require_updatable(installation)
+    return installation
 
-    result = check(resolved)
+
+def install_release(config: Config, result: Result, installation: Installation, *, quiet: bool = True) -> Result:
+    """Install the release `result` names, over the running one.
+
+    A no-op returning the result unchanged when there is nothing newer. On
+    success this interpreter's environment has been rewritten underneath it, so
+    the caller may not import anything afterwards -- see
+    `pyselfupdate.install.reexec` and `pyselfupdate.install.exit_now`.
+    """
     if not result.update_available or result.release is None:
         return result
 
@@ -79,6 +88,20 @@ def update(config: Config, *, quiet: bool = True) -> Result:
         applied=True,
         release=result.release,
     )
+
+
+def update(config: Config, *, quiet: bool = True) -> Result:
+    """Check for a newer release and install it, in one call.
+
+    A no-op returning `applied=False` when already current. The composition of
+    `require_updatable`, `check` and `install_release`, in the order that keeps
+    a refusal cheap; a caller needing to do work between the check and the
+    install calls those three itself.
+    """
+    resolved = config.resolved()
+    installation = require_updatable(resolved)
+    result = check(resolved)
+    return install_release(resolved, result, installation, quiet=quiet)
 
 
 def update_and_reexec(config: Config, *, quiet: bool = True) -> Result:

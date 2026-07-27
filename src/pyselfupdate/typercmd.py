@@ -21,15 +21,16 @@ rather than at the first call.
 
 from __future__ import annotations
 
-import sys
-
 import typer
 
 from pyselfupdate.config import Config
 from pyselfupdate.errors import SelfUpdateError
+from pyselfupdate.install import Installation
+from pyselfupdate.install import exit_now
 from pyselfupdate.updater import changelog
 from pyselfupdate.updater import check
-from pyselfupdate.updater import update
+from pyselfupdate.updater import install_release
+from pyselfupdate.updater import require_updatable
 
 
 def add_update_command(app: typer.Typer, config: Config, *, name: str = 'update') -> None:
@@ -50,10 +51,21 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
     the command under a group, does not have to reimplement the reporting. The
     output format is identical to goselfupdate's, because a fleet that reports
     the same thing three different ways is a fleet you have to read carefully.
+
+    The step order is the load-bearing part. Everything that reaches the network
+    or imports a module happens before the install; after it, this process only
+    prints what it already holds and exits without unwinding. Both halves of
+    that are lessons from a real failure: syncer 4.0.0 fetched its changelog
+    after replacing its own environment, and died on httpx's lazy import of
+    httpcore -- a module the release it had just installed no longer depended
+    on, and so had just deleted.
     """
     tool = config.tool
+    installation: Installation | None = None
     try:
-        result = check(config) if check_only else update(config)
+        if not check_only:
+            installation = require_updatable(config)
+        result = check(config)
     except SelfUpdateError as error:
         typer.echo(f'✗ {tool} upgrade failed: {error}', err=True)
         raise typer.Exit(1) from error
@@ -62,25 +74,28 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
         typer.echo(f'✓ {tool} already at latest: {result.latest}')
         return
 
-    if result.applied:
-        typer.echo(f'✓ {tool} upgraded: {result.current} → {result.latest}')
-    else:
-        typer.echo(f'✓ {tool} update available: {result.current} → {result.latest}')
+    subjects = [] if skip_changelog else changelog(config, result.current, result.latest)
 
-    if skip_changelog:
+    if installation is None:
+        typer.echo(f'✓ {tool} update available: {result.current} → {result.latest}')
+        _echo_changes(subjects)
         return
 
-    subjects = changelog(config, result.current, result.latest)
+    try:
+        install_release(config, result, installation)
+    except SelfUpdateError as error:
+        typer.echo(f'✗ {tool} upgrade failed: {error}', err=True)
+        raise typer.Exit(1) from error
+
+    typer.echo(f'✓ {tool} upgraded: {result.current} → {result.latest}')
+    _echo_changes(subjects)
+    exit_now()
+
+
+def _echo_changes(subjects: list[str]) -> None:
     if not subjects:
         return
-
     typer.echo('')
     typer.echo('Changes:')
     for subject in subjects:
         typer.echo(f'  • {subject}')
-
-    # The environment this interpreter is running in has just been replaced.
-    # Nothing more may be imported, so the process ends here rather than
-    # returning into a CLI that might touch a lazily-loaded module.
-    if result.applied:
-        sys.stdout.flush()

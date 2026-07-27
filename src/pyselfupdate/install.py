@@ -156,6 +156,25 @@ def run_install(requirement: str, *, quiet: bool = True) -> None:
         raise InstallFailedError(f'uv tool install failed: {message}')
 
 
+def exit_now(code: int = 0) -> None:
+    """End this process immediately, after flushing what it has written.
+
+    The sibling of `reexec` for when there is nothing left to run. Both exist
+    for the same reason: the environment has been rewritten, so no further
+    import can be trusted. `sys.exit` raises SystemExit, which unwinds through
+    whatever CLI framework called us and then through interpreter shutdown --
+    and both are free to import a module they had not needed yet, from a
+    directory that is no longer the one this process started in. `os._exit`
+    skips both, which is why the flushes are done here rather than left to the
+    shutdown that no longer happens.
+
+    Never returns.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
+
+
 def reexec() -> None:
     """Replace this process with the newly installed one.
 

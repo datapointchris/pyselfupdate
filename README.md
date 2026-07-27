@@ -102,8 +102,23 @@ add_update_command(app, CONFIG)  # gives you `mytool update [--check]`
 environment the running interpreter lives in**. Unlike replacing a Unix binary
 — where the process holds an inode and is untouched — this pulls modules out
 from under a live process, so anything imported afterwards may fail in ways
-that are hard to read. Make it the last thing your process does, or use
-`update_and_reexec` to replace the process with the new version immediately.
+that are hard to read. Make it the last thing your process does, then call
+`exit_now` — or use `update_and_reexec` to replace the process with the new
+version immediately.
+
+That cuts both ways: anything you want to *print* after the install has to be
+fetched before it. `run_update` resolves its changelog first for exactly this
+reason, and a caller that needs its own steps in between composes the three
+pieces `update` is made of rather than working around it:
+
+```python
+installation = require_updatable(config)  # refuses a checkout, costs nothing
+result = check(config)                    # network, environment still intact
+notes = changelog(config, result.current, result.latest)
+install_release(config, result, installation)
+print(notes)
+exit_now()
+```
 
 ## What will not be updated
 
