@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # python-semantic-release decides the version, writes it into pyproject.toml,
+  # tags, and creates the GitHub release.
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: python-semantic-release/python-semantic-release@v9
+        id: release
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  # A separate job, in the same workflow, gated on the one above.
+  #
+  # Same workflow because a tag pushed with GITHUB_TOKEN does not trigger
+  # another workflow run -- so a publish keyed on `release: published` or
+  # `push: tags` would simply never fire. Separate job because publishing needs
+  # `id-token: write` for OIDC, and the version job must not have it.
+  publish:
+    needs: version
+    if: needs.version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyselfupdate
+    permissions:
+      # Trusted Publishing. No API token is stored in this repository; PyPI is
+      # configured to accept a short-lived OIDC credential from this workflow.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The tag, not the branch: main may already have moved, and the
+          # artifact must be built from exactly what was released.
+          ref: ${{ needs.version.outputs.tag }}
+
+      - uses: astral-sh/setup-uv@v6
+
+      - run: uv build
+
+      # A version cannot be replaced once uploaded, only yanked, so the sdist
+      # and wheel are checked before anything is irreversible.
+      - run: uv run --no-project --with twine twine check dist/*
+
+      - name: Publish to PyPI
+        run: uv publish

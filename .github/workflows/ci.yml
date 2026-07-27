@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The README claims Linux, macOS and Windows support and a 3.11 floor. Both
+  # are only true if they are actually exercised.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Run the suite
+        run: uv run --python ${{ matrix.python }} --all-extras pytest -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv run ruff check .
+
+      - run: uv run ruff format --check .
+
+      - run: uv run mypy src
+
+      - run: uv run bandit -c pyproject.toml -r src
+
+  # The package's selling point is having no runtime dependencies. A stray
+  # import in a future change would silently remove it, and nothing else in CI
+  # would notice: the dev group installs typer, so the tests would still pass.
+  no-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: The declared dependency list is empty
+        run: |
+          declared="$(uv run --no-project python -c '
+          import tomllib, pathlib
+          data = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          print(" ".join(data["project"]["dependencies"]))
+          ')"
+          if [ -n "$declared" ]; then
+            echo "the package declares runtime dependencies: $declared"
+            exit 1
+          fi
+
+      # Declaring none is not the same as needing none. Installed alone, into an
+      # environment with nothing else in it, every module must still import --
+      # except typercmd, which is the extra and is expected to fail.
+      - name: Every core module imports with nothing else installed
+        run: |
+          uv venv --python 3.11 /tmp/bare
+          VIRTUAL_ENV=/tmp/bare uv pip install --no-deps .
+          VIRTUAL_ENV=/tmp/bare uv run --no-project python - <<'EOF'
+          import importlib
+
+          for name in ('config', 'errors', 'github', 'install', 'notifier', 'source', 'state', 'updater', 'version'):
+              importlib.import_module(f'pyselfupdate.{name}')
+          import pyselfupdate
+          print('core imports clean:', pyselfupdate.__all__[:3], '...')
+
+          try:
+              importlib.import_module('pyselfupdate.typercmd')
+          except ImportError:
+              print('typercmd correctly requires the typer extra')
+          else:
+              raise SystemExit('typercmd imported without typer installed')
+          EOF
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      # A package that cannot be built is a package that cannot be released, and
+      # finding that out at tag time means the tag is already permanent.
+      - run: uv build
+
+      - run: uv run --no-project --with twine twine check dist/*
