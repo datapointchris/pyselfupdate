@@ -135,7 +135,6 @@ def _notify(
     # a rate-limited or offline user re-hits the API on every single invocation
     # until the window resets. The whole point of an interval is to bound the
     # request rate, and only this ordering actually does that.
-    stored.skip = ''
     state_module.write(state_module.stamp(stored))
 
     try:

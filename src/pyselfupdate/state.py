@@ -40,12 +40,11 @@ class State:
 
     current_version: str = ''
     latest_version: str = ''
+    # Non-empty when the last check failed. There is deliberately no separate
+    # "skip reason" field: a gate that declines to check does not write this
+    # file at all, which is what makes "no state file" observable proof that the
+    # network was never touched.
     last_error: str = ''
-
-    # Why the last run did not check, empty when it did. This is the only trace
-    # a silently skipping tool leaves, and the reason a dashboard can explain
-    # itself.
-    skip: str = ''
 
 
 def state_home() -> Path:

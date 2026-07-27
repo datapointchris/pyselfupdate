@@ -151,8 +151,7 @@ shared egress address is not.
   "checked_at_epoch": 1785078435,
   "current_version": "v1.3.2",
   "latest_version": "v1.4.0",
-  "last_error": "",
-  "skip": ""
+  "last_error": ""
 }
 ```
 
