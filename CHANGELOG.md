@@ -1,6 +1,48 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-07-27)
+
+### Documentation
+
+- State accurately what the siblings share today
+  ([`2cc54f5`](https://github.com/datapointchris/pyselfupdate/commit/2cc54f5f53204c95023e2c9a19a7206008fc1715))
+
+Both new libraries claimed all three share the state schema and the NO_AUTO_UPDATE contract.
+  goselfupdate has neither: it implements the update half only and has no notify layer, so the claim
+  was false for a third of the family it described.
+
+### Features
+
+- Resolve an expensive token lazily with token_func
+  ([`4c15a87`](https://github.com/datapointchris/pyselfupdate/commit/4c15a878dd91e106ae7c0a869d1132c06c3172aa))
+
+A private repository needs a real token, and the usual source is the `gh` CLI — a subprocess.
+  Assigning that to Config.token means it runs wherever the Config is built, and the notify gate
+  resolves one on every invocation to then decline in microseconds. relate is the case that surfaced
+  it: a private repo whose CLI would have paid a process spawn on every command.
+
+token_func is consulted where the token is actually used, inside the request, so it runs only when a
+  request is made. It sits last in the precedence chain, leaving an explicit token and both
+  environment variables unaffected. Mirrors goselfupdate's Config.TokenFunc.
+
+### Refactoring
+
+- Drop the unwritten skip field from the state schema
+  ([`d7e432c`](https://github.com/datapointchris/pyselfupdate/commit/d7e432c6aab539ccbc761e9c8284e1217798c6fc))
+
+Nothing ever wrote it: the only assignment set it to the empty string, because a gate that declines
+  to check deliberately does not write the file at all. That absence is what makes "no state file"
+  observable proof the network was never touched, so a skip-reason field has no writer by design
+  rather than by oversight.
+
+Surfaced while writing the bash sibling, where shellcheck flagged the captured-and-unused reason
+  that would have populated it. A documented schema field with no writer is worse than no field, and
+  this schema is shared across all three libraries.
+
+No behaviour changes, so no release is cut.
+
+
 ## v0.1.0 (2026-07-27)
 
 ### Features
