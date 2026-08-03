@@ -1,6 +1,5 @@
 # CHANGELOG
 
-
 ## v0.2.1 (2026-07-27)
 
 ### Bug Fixes
@@ -32,7 +31,6 @@ update() is unchanged for callers; it is now the composition of require_updatabl
 
 semantic-release writes CHANGELOG.md from its own template, blank lines and all, so --fix rewrites
   it on every --all-files run and the change comes straight back at the next release.
-
 
 ## v0.2.0 (2026-07-27)
 
@@ -74,7 +72,6 @@ Surfaced while writing the bash sibling, where shellcheck flagged the captured-a
   this schema is shared across all three libraries.
 
 No behaviour changes, so no release is cut.
-
 
 ## v0.1.0 (2026-07-27)
 
