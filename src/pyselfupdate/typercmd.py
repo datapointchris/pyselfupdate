@@ -67,7 +67,7 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
             installation = require_updatable(config)
         result = check(config)
     except SelfUpdateError as error:
-        typer.echo(f'✗ {tool} upgrade failed: {error}', err=True)
+        typer.echo(f'✗ {tool} update failed: {error}', err=True)
         raise typer.Exit(1) from error
 
     if not result.update_available:
@@ -84,10 +84,10 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
     try:
         install_release(config, result, installation)
     except SelfUpdateError as error:
-        typer.echo(f'✗ {tool} upgrade failed: {error}', err=True)
+        typer.echo(f'✗ {tool} update failed: {error}', err=True)
         raise typer.Exit(1) from error
 
-    typer.echo(f'✓ {tool} upgraded: {result.current} → {result.latest}')
+    typer.echo(f'✓ {tool} updated: {result.current} → {result.latest}')
     _echo_changes(subjects)
     exit_now()
 

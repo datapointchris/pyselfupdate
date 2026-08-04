@@ -86,7 +86,7 @@ def test_an_applied_update_ends_the_process(pinned, installs, exits, capsys) -> 
 
     assert exits == [0]
     output = capsys.readouterr().out
-    assert 'demo upgraded: v1.0.0 → v2.0.0' in output
+    assert 'demo updated: v1.0.0 → v2.0.0' in output
     assert '  • feat: one' in output
 
 
@@ -138,4 +138,4 @@ def test_an_install_failure_exits_non_zero(pinned, exits, capsys, monkeypatch: p
 
     assert raised.value.exit_code == 1
     assert not exits
-    assert 'demo upgrade failed: uv tool install failed: no such ref' in capsys.readouterr().err
+    assert 'demo update failed: uv tool install failed: no such ref' in capsys.readouterr().err

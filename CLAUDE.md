@@ -47,7 +47,7 @@ to the function and fail on attribute access. Do not rename them back.
   requires, which is what lets uv's receipt be read without a dependency.
 - **The notify path never raises and never prints an error.** `update` raises
   and `<tool> update` prints. This is what stops a dev checkout printing an
-  upgrade failure on every invocation, and it is a design rule rather than a
+  update failure on every invocation, and it is a design rule rather than a
   collection of individual try/excepts.
 - **The last-checked timestamp is written before the network call, not after.**
   `gh` stamps only on success, so a rate-limited or offline user re-hits the API

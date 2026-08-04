@@ -3,7 +3,7 @@
 This layer never installs. `<tool> update` installs, and `<tool> update` is
 where errors are printed; a failure here is recorded in the state file and
 swallowed. That single rule is what keeps a dev checkout from printing an
-upgrade failure on every invocation.
+update failure on every invocation.
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ def notify(
 def enabled(config: Config, *, interactive: bool | None = None) -> tuple[bool, Skip | None]:
     """Whether a check would run, without touching the network or the clock.
 
-    Backs `<tool> update --why` and any fleet dashboard. The interval is
+    Backs a fleet dashboard and a `<tool> update --why`. The interval is
     deliberately not consulted: this answers "is this tool opted in", not "is it
     due".
     """
