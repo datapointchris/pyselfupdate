@@ -1,5 +1,71 @@
 # CHANGELOG
 
+
+## v0.2.2 (2026-08-04)
+
+### Bug Fixes
+
+- Report the update in the verb that ran it
+  ([`d534189`](https://github.com/datapointchris/pyselfupdate/commit/d534189df5f7eb1782b85bf261b0c2f88ebdc137))
+
+The command is `update`, and --check and the daily notice both say "update", but the success and
+  failure lines said "upgraded" and "upgrade failed". One command, one vocabulary.
+
+### Chores
+
+- Add .planning to gitignore
+  ([`d10f941`](https://github.com/datapointchris/pyselfupdate/commit/d10f941e32765b686cfab7755d0dee0c4908bc01))
+
+- **config**: Adopt the standard pyright section
+  ([`2bc0aa8`](https://github.com/datapointchris/pyselfupdate/commit/2bc0aa828770f634a7d2dc951e072673dd0e15a0))
+
+Synced from forge pyproject template. With no [tool.pyright] section the editor LSP settings
+  applied, and their ignore = ["*"] suppressed every diagnostic. A config file takes precedence over
+  those settings, so basedpyright now reports against the same "standard" mode as the rest of the
+  portfolio instead of reporting nothing.
+
+- **config**: Record the keys the pyproject sync owns
+  ([`1f3e5a9`](https://github.com/datapointchris/pyselfupdate/commit/1f3e5a974e059370794662fbbcca5c6b62927333))
+
+forge now writes [tool.forge] managed, listing the exact keys the standard sets. Deletion on a later
+  sync is scoped to that record, so dropping a key from the template retracts it here without having
+  to guess which settings belong to this project.
+
+Purely additive: nothing else in this file changed.
+
+- **toolchain**: Adopt the generated configs and CI
+  ([`d0be7cf`](https://github.com/datapointchris/pyselfupdate/commit/d0be7cf5a1709f28841b021bfce85e67e3f597ab))
+
+Brings the repo onto forge toolchain manifest 11.
+
+bandit, refurb and pyupgrade drop out: pyupgrade is ruff's UP rules, already selected, and the other
+  two are the manifest's deliberate narrowing to the rule set every repo actually runs.
+
+### Documentation
+
+- Flush dormant markdownlint violations
+  ([`faa11a2`](https://github.com/datapointchris/pyselfupdate/commit/faa11a219377708e9774cab521fed3d15fcf511e))
+
+markdownlint only runs on the files a commit touches, so unmodified docs accumulate violations
+  invisibly. The toolchain sync bumps markdownlint to v0.47, which added MD060, and runs --all-files
+  — surfacing every one of them at once, in the middle of an unrelated change.
+
+Table separators are normalized to the compact `| --- |` style MD060 expects, which --fix cannot
+  repair; everything else is markdownlint --fix.
+
+- Format the composed-update example as ruff wants it
+  ([`9842930`](https://github.com/datapointchris/pyselfupdate/commit/98429308a00bebaa94abdc5ee263fd126e63a003))
+
+CI runs `ruff format --check .`, which formats python blocks inside markdown; the pre-commit hook
+  only sees .py files, so aligned comments in a README example pass locally and fail there.
+
+- Stop normalizing the generated CHANGELOG
+  ([`109706e`](https://github.com/datapointchris/pyselfupdate/commit/109706e4cc28cc08facc4bd6e31f2f0a47e98d57))
+
+semantic-release regenerates CHANGELOG.md on every release, so a markdownlint fix there is undone on
+  the next one and comes back as a conflict when a local commit rebases onto the release.
+
+
 ## v0.2.1 (2026-07-27)
 
 ### Bug Fixes
@@ -31,6 +97,7 @@ update() is unchanged for callers; it is now the composition of require_updatabl
 
 semantic-release writes CHANGELOG.md from its own template, blank lines and all, so --fix rewrites
   it on every --all-files run and the change comes straight back at the next release.
+
 
 ## v0.2.0 (2026-07-27)
 
@@ -72,6 +139,7 @@ Surfaced while writing the bash sibling, where shellcheck flagged the captured-a
   this schema is shared across all three libraries.
 
 No behaviour changes, so no release is cut.
+
 
 ## v0.1.0 (2026-07-27)
 
