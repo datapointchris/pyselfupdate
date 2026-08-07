@@ -9,11 +9,13 @@ public API, the README and the docstrings as the product — a change that is
 merely convenient for the internal consumers is not automatically right.
 
 It is the Python sibling of `~/tools/goselfupdate` and `~/tools/bashselfupdate`.
-The three deliberately share conventions and version precedence. The state-file
-schema and the environment-variable contract are shared with the sibling that
-also has a notify layer; **goselfupdate does not have one yet**, so today it
-implements the update half only. They do **not** share an API, because "update"
-means three different operations — see "Why the API differs from goselfupdate".
+The three deliberately share conventions and version precedence. All three now
+have a notify layer — goselfupdate's is `autoupdate/autoupdate.go`. The
+state-file schema and the environment-variable contract are shared across all
+three, so a rename in one breaks the other two; see
+`~/dev/standards/release.md` § Self-update. They do **not** share an API,
+because "update" means three different operations — see "Why the API differs
+from goselfupdate".
 
 ## Layout
 
@@ -42,25 +44,20 @@ to the function and fail on attribute access. Do not rename them back.
   version library.
 - **typer stays confined to `typercmd.py`,** installed via the `typer` extra.
   Go gets this for free through module graph pruning; Python needs the extra.
-- **The floor is Python 3.11 and CI tests against it.** Raising it excludes
-  callers and needs a reason beyond convenience. 3.11 is what `tomllib`
-  requires, which is what lets uv's receipt be read without a dependency.
-- **The notify path never raises and never prints an error.** `update` raises
-  and `<tool> update` prints. This is what stops a dev checkout printing an
-  update failure on every invocation, and it is a design rule rather than a
-  collection of individual try/excepts.
-- **The last-checked timestamp is written before the network call, not after.**
-  `gh` stamps only on success, so a rate-limited or offline user re-hits the API
-  on every invocation until the window resets. An interval exists to bound the
-  request rate; only this ordering does that. There is a test named for it.
-- **Version comparison stays byte-compatible with goselfupdate's `semver.go`.**
-  If they disagree, a tool and its Go sibling disagree about which release is
-  newer. `test_precedence_follows_the_specification` asserts the full ordering
-  matrix from semver.org section 11, which both were written against.
-- **The state schema is shared across all three libraries.** Adding a field is
-  fine; renaming or repurposing one breaks the other two and the dashboard.
+- **The floor is Python 3.11 and CI tests against it.** This is a sanctioned
+  exception to the fleet's 3.13 floor, recorded in `~/dev/standards/python.md`:
+  3.11 is what `tomllib` requires, which is what lets uv's receipt be read
+  without a dependency. Raising it excludes callers.
 - **Errors are typed.** A new failure mode gets a class in `errors.py`; callers
   must never have to match on message text.
+
+The self-update design rules — notify never raises or prints, the timestamp is
+stamped before the network call, version comparison stays byte-compatible with
+the siblings, and the state schema is shared across all three — are
+`~/dev/standards/release.md` § Self-update, and are not restated here. Where
+they land in this repo: `test_precedence_follows_the_specification` is the
+ordering-matrix assertion, and the notify path's no-raise guarantee is a design
+rule rather than a collection of individual try/excepts.
 
 ## Why the API differs from goselfupdate
 
