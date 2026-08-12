@@ -13,7 +13,7 @@ The three deliberately share conventions and version precedence. All three now
 have a notify layer — goselfupdate's is `autoupdate/autoupdate.go`. The
 state-file schema and the environment-variable contract are shared across all
 three, so a rename in one breaks the other two; see
-`~/dev/standards/release.md` § Self-update. They do **not** share an API,
+`standards/release.md` § Self-update. They do **not** share an API,
 because "update" means three different operations — see "Why the API differs
 from goselfupdate".
 
@@ -45,7 +45,7 @@ to the function and fail on attribute access. Do not rename them back.
 - **typer stays confined to `typercmd.py`,** installed via the `typer` extra.
   Go gets this for free through module graph pruning; Python needs the extra.
 - **The floor is Python 3.11 and CI tests against it.** This is a sanctioned
-  exception to the fleet's 3.13 floor, recorded in `~/dev/standards/python.md`:
+  exception to the fleet's 3.13 floor, recorded in `standards/python.md`:
   3.11 is what `tomllib` requires, which is what lets uv's receipt be read
   without a dependency. Raising it excludes callers.
 - **Errors are typed.** A new failure mode gets a class in `errors.py`; callers
@@ -54,7 +54,7 @@ to the function and fail on attribute access. Do not rename them back.
 The self-update design rules — notify never raises or prints, the timestamp is
 stamped before the network call, version comparison stays byte-compatible with
 the siblings, and the state schema is shared across all three — are
-`~/dev/standards/release.md` § Self-update, and are not restated here. Where
+`standards/release.md` § Self-update, and are not restated here. Where
 they land in this repo: `test_precedence_follows_the_specification` is the
 ordering-matrix assertion, and the notify path's no-raise guarantee is a design
 rule rather than a collection of individual try/excepts.
