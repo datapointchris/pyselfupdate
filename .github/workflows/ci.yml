@@ -28,23 +28,6 @@ jobs:
       - name: Run the suite
         run: uv run --python ${{ matrix.python }} --all-extras pytest -q
 
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-
-      - run: uv run ruff check .
-
-      - run: uv run ruff format --check .
-
-      - run: uv run mypy src
-
-      - run: uv run bandit -c pyproject.toml -r src
-
   # The package's selling point is having no runtime dependencies. A stray
   # import in a future change would silently remove it, and nothing else in CI
   # would notice: the dev group installs typer, so the tests would still pass.

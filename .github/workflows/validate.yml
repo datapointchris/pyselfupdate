@@ -68,3 +68,13 @@ jobs:
           set -e
           if [ "$code" -eq 0 ] || [ "$code" -eq 5 ]; then exit 0; fi
           exit 1
+
+      # > custom:after:python - bandit
+      #
+      # The only lint the generated block does not already run. It lived in a
+      # bespoke lint job beside ruff and mypy, where `uv run ruff` resolved the
+      # dev group's unpinned floor to 0.16.0 while this workflow and the
+      # pre-commit hook both pin 0.12.5 — two linters at different versions on
+      # one tree, free to disagree about a finding.
+      - name: Run bandit
+        run: uv run bandit -c pyproject.toml -r src
