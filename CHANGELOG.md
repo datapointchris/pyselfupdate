@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.3.1 (2026-08-21)
+
+### Bug Fixes
+
+- **github**: Tell bandit the token-command constants hold no token
+  ([`2abb09e`](https://github.com/datapointchris/pyselfupdate/commit/2abb09e6aaad4c926b139a33a2473ee8b71bd3c5))
+
+B105 reads any name carrying "token" as a credential, so TOKEN_COMMAND_ENV and DEFAULT_TOKEN_COMMAND
+  were reported as hardcoded passwords. One holds the name of an environment variable and the other
+  the text of a command.
+
+bandit runs in a custom block of validate.yml and had no local counterpart, so the finding could
+  only surface as a red push. The pre-commit hook runs the same command against the same config,
+  which is what keeps the two from disagreeing.
+
+
 ## v0.3.0 (2026-08-21)
 
 ### Build System
