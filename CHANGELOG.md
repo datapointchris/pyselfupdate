@@ -1,6 +1,113 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-08-21)
+
+### Build System
+
+- **precommit**: Resync to forge toolchain 14
+  ([`3b8ecf9`](https://github.com/datapointchris/pyselfupdate/commit/3b8ecf9dc317ce925e69d137737a00e5dfed6619))
+
+### Chores
+
+- **lint**: Disable SC1091/SC1090 from the forge toolchain
+  ([`667b4fd`](https://github.com/datapointchris/pyselfupdate/commit/667b4fddd157b9ba24ec1251a1216c33a7882715))
+
+- **pyproject**: Raise assertion verbosity instead of test verbosity
+  ([`8254919`](https://github.com/datapointchris/pyselfupdate/commit/82549192e304936735fa8093e0f5919e7ab2b087))
+
+A failing assertion truncated its diff and printed "use -vv to show", so the reader re-ran the whole
+  suite to see it. addopts = "-vv" answered that by raising test-list verbosity as well, which is a
+  different question: a green run printed a line per test and said nothing. verbosity_assertions
+  raises only the half that was wanted.
+
+Written by the forge pyproject die.
+
+### Continuous Integration
+
+- Drop the duplicated lint job, keep bandit
+  ([`4be5cab`](https://github.com/datapointchris/pyselfupdate/commit/4be5caba092b8de77c7e603a03799e92d57aaf49))
+
+The bespoke lint job ran ruff, ruff format and mypy, all three of which the generated workflow
+  already runs. It resolved ruff through `uv run` from the dev group's `ruff>=0.7.0` floor, which
+  the lock puts at 0.16.0, while validate.yml and the pre-commit hook both pin 0.12.5 — two linters
+  four minor versions apart on one tree, free to disagree.
+
+bandit was the only step the baseline did not cover, so it moves into a custom:after:python block
+  rather than being lost. mypy coverage widens in the move: the baseline checks `.` where this
+  checked `src`.
+
+Same removal bashselfupdate had for shellcheck and shfmt, and the same place logsift's bandit went.
+
+- Regenerate validate.yml at toolchain 16
+  ([`23dbbb8`](https://github.com/datapointchris/pyselfupdate/commit/23dbbb8b2897637df9807dcba9b86c617ece95bc))
+
+Catches this repo up with the version manifest: StyLua pinned to a release rather than latest, a
+  reworded bats discovery note, and double quotes in the node block. Only the blocks this repo
+  declares are affected.
+
+Triggers and job structure are unchanged.
+
+- Rename bespoke workflow to Bespoke CI
+  ([`9664c4d`](https://github.com/datapointchris/pyselfupdate/commit/9664c4d0521199771db1062a2045934d3a13ce84))
+
+The generated validate.yml also declares `name: CI`, so one commit produced two indistinguishable CI
+  rows carrying the same createdAt to the second. Ordering that pair by timestamp is undefined, so a
+  failing bespoke run read as green whenever the baseline passed. This repo is where that was
+  measured: no-dependencies failed while the generated job passed on the same sha, and a fleet sweep
+  reported the repo green.
+
+Display name only. Required status checks match job names, and a release gate names the workflow
+  file rather than its name.
+
+### Documentation
+
+- Cite the standards without a machine path
+  ([`a7453e8`](https://github.com/datapointchris/pyselfupdate/commit/a7453e8902416b085a2fdfcc17e0d82d69032bdd))
+
+The citation carried an absolute path from one machine's layout. What a reader needs is the file and
+  the section, and those do not move.
+
+- Cross-reference release.md instead of restating nine of its rules
+  ([`2ffada4`](https://github.com/datapointchris/pyselfupdate/commit/2ffada453c495a81064bdd9556a9bcc7055c0aaa))
+
+The self-update design rules were reproduced here with the same worked examples release.md already
+  carries. Keep only what is specific to this repo — the 3.11 floor as a sanctioned exception, typed
+  errors, and where the ordering matrix is asserted — and point at the standard for the rest.
+
+Also corrects the claim that goselfupdate has no notify layer; it does, at autoupdate/autoupdate.go.
+
+### Features
+
+- **github**: Authenticate by default, resolved inside the source
+  ([`0aff222`](https://github.com/datapointchris/pyselfupdate/commit/0aff22265d2c6c5f4c4f8ffe3765487359a1354d))
+
+The library refused to shell out to gh, on the principle that it should not spawn a subprocess a
+  caller did not ask for. The consequence was that all seventeen consumers had to paste the same
+  five-line helper, and eleven never did — so eleven tools were asking GitHub anonymously.
+
+Anonymous is not no credential. It is 60 requests an hour charged per IP address, shared by every
+  host behind one egress. Measured 2026-08-21 across one household: two machines checking on a timer
+  held that pool at zero for whole hours and every tool that asked anonymously was refused,
+  including on a laptop that had run nothing.
+
+GitHubSource now resolves GITHUB_TOKEN_COMMAND, defaulting to gh auth token. One lever that both
+  redirects and disables: set it to another command to use that, set it to empty to stay anonymous.
+  Named for what it produces rather than for turning something off, because a NO_GH_TOKEN cannot say
+  use this other source and reads as a claim about whether one exists rather than an instruction
+  about whether to use one.
+
+It lives on GitHubSource rather than Config because the credential is the host's business. A Source
+  for another forge brings its own variable and its own command, and nothing above the Source
+  protocol learns either.
+
+The rate-limit message now names which ceiling was hit. One sentence for both told whoever hit the
+  authenticated limit to supply a token the request already carried.
+
+Tests default the command to empty, so the suite no longer passes or fails on whether the developer
+  happens to be logged in to gh.
+
+
 ## v0.2.2 (2026-08-04)
 
 ### Bug Fixes

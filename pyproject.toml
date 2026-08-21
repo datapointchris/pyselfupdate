@@ -1,6 +1,6 @@
 [project]
 name = "pyselfupdate"
-version = "0.2.2"
+version = "0.3.0"
 description = "Self-update and update notification for Python CLIs installed with uv tool"
 authors = [{ name = "Chris Birch", email = "datapointchris@gmail.com" }]
 license = { text = "MIT" }
