@@ -180,6 +180,20 @@ repos:
         types: [python]
         pass_filenames: false
 
+# > custom:after:python-lint - bandit
+  # validate.yml runs bandit in a custom block of its own, because the generated
+  # block does not. Without this hook that lint exists only on the runner, and a
+  # finding is discovered by a red push rather than by the commit that caused it.
+  # Same command as the workflow step, so the two cannot disagree.
+  - repo: local
+    hooks:
+      - id: bandit
+        name: bandit
+        entry: uv run bandit -c pyproject.toml -r src
+        language: system
+        types: [python]
+        pass_filenames: false
+
 # generated:github-actions - GitHub Actions
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7

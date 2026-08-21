@@ -29,9 +29,11 @@ API = 'https://api.github.com'
 DEFAULT_TIMEOUT = 10.0
 
 
-TOKEN_COMMAND_ENV = 'GITHUB_TOKEN_COMMAND'
+# B105 reads any name carrying "token" as a credential. Both hold the name of a
+# variable and the text of a command; neither ever holds a secret.
+TOKEN_COMMAND_ENV = 'GITHUB_TOKEN_COMMAND'  # nosec B105
 
-DEFAULT_TOKEN_COMMAND = 'gh auth token'
+DEFAULT_TOKEN_COMMAND = 'gh auth token'  # nosec B105
 """What runs when nothing overrides it.
 
 Authenticating is the default because the alternative is not "no credential" but
