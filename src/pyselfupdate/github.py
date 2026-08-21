@@ -8,12 +8,17 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import shutil
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
+from datetime import UTC
+from datetime import datetime
 
 from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.errors import SelfUpdateError
@@ -24,36 +29,100 @@ API = 'https://api.github.com'
 DEFAULT_TIMEOUT = 10.0
 
 
-def token_from_env() -> str:
-    """A token from the environment, or an empty string.
+TOKEN_COMMAND_ENV = 'GITHUB_TOKEN_COMMAND'
 
-    Deliberately does not shell out to `gh auth token`. A library should not
-    spawn a subprocess a caller did not ask for, and a caller who wants that
-    behaviour can pass the token in. This matches goselfupdate.
-    """
+DEFAULT_TOKEN_COMMAND = 'gh auth token'
+"""What runs when nothing overrides it.
+
+Authenticating is the default because the alternative is not "no credential" but
+"sixty requests an hour, charged per IP address and shared by every host behind
+one egress". Measured 2026-08-21 across one household: two machines checking on a
+timer held that pool at zero for whole hours, and every tool on the network that
+asked anonymously was refused. A default that has to be opted into is a default
+nobody sets, and eleven of fourteen tools here had not.
+"""
+
+
+def token_from_env() -> str:
+    """A token from the environment, or an empty string."""
     return os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN') or ''
+
+
+def token_from_command() -> str:
+    """A token from `$GITHUB_TOKEN_COMMAND`, or from `gh auth token`.
+
+    One lever that both redirects and disables, which is what a switch has to do
+    to be worth having. Unset runs the default; set to a command runs that one;
+    set to empty runs nothing and the request goes out unauthenticated.
+
+        GITHUB_TOKEN_COMMAND='pass show github/token'
+        GITHUB_TOKEN_COMMAND=''
+
+    Named for the thing it produces rather than for turning something off. A
+    `NO_GH_TOKEN` cannot say "use this other source" and reads as a claim about
+    whether one exists rather than an instruction about whether to use one.
+
+    This lives on `GitHubSource` rather than on `Config`, because the credential
+    is the host's business. A source for another forge brings its own variable
+    and its own command, and nothing above `Source` learns either name.
+
+    Never raises. Every failure -- no such command, a non-zero exit, a binary
+    that is not installed -- degrades to an unauthenticated request, which still
+    works against a public repository.
+    """
+    command = os.environ.get(TOKEN_COMMAND_ENV, DEFAULT_TOKEN_COMMAND)
+    argv = shlex.split(command)
+    if not argv:
+        return ''
+
+    # Resolved to a full path so the call is not a partial-path lookup, which is
+    # what bandit's B607 is about and what makes a PATH entry able to answer.
+    binary = shutil.which(argv[0])
+    if not binary:
+        return ''
+    try:
+        result = subprocess.run([binary, *argv[1:]], capture_output=True, text=True, check=False, timeout=COMMAND_TIMEOUT_SECONDS)  # noqa: S603
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    return result.stdout.strip() if result.returncode == 0 else ''
+
+
+COMMAND_TIMEOUT_SECONDS = 10.0
+"""A credential helper that hangs must not hang the command someone typed.
+
+`gh` is a local read, but the variable takes an arbitrary command and a password
+manager can block on a locked vault or a touch prompt that nobody is there to
+answer -- and the update check runs unattended on a timer.
+"""
 
 
 @dataclass
 class GitHubSource:
     """Releases published on GitHub.
 
-    Without a token GitHub allows 60 API requests per hour per IP address and
-    rejects private repositories outright.
+    Authenticates by default. Without a credential GitHub allows 60 API requests
+    an hour *per IP address* -- shared with every other anonymous caller behind
+    the same egress -- and rejects private repositories outright.
+
+    Four sources, first non-empty wins: `token`, `$GITHUB_TOKEN`/`$GH_TOKEN`,
+    `token_func`, then `$GITHUB_TOKEN_COMMAND` defaulting to `gh auth token`.
     """
 
     owner: str
     repo: str
     token: str = ''
 
-    # Resolves a token when `token` is empty and neither environment variable is
-    # set. Called only when a request is actually about to be made.
+    # A source of a caller's own, tried before the command. Called only when a
+    # request is actually about to be made.
     #
     # It exists because a credential can be expensive to obtain -- a keychain
-    # prompt, a `gh auth token` subprocess -- and a caller that resolves such a
-    # token eagerly into `token` pays for it on every invocation, including the
-    # ones where the notify gate declines to check at all. That gate is
-    # otherwise free, and a subprocess spawn in front of it is the entire cost.
+    # prompt, a subprocess -- and a caller that resolves such a token eagerly
+    # into `token` pays for it on every invocation, including the ones where the
+    # notify gate declines to check at all. That gate is otherwise free, and a
+    # spawn in front of it is the entire cost.
+    #
+    # Reaching for `gh` no longer needs one: that is the default below. This is
+    # for a credential neither the environment nor a command can produce.
     token_func: Callable[[], str] | None = None
 
     timeout: float = DEFAULT_TIMEOUT
@@ -66,6 +135,16 @@ class GitHubSource:
     tag_prefix: str = ''
 
     headers: dict[str, str] = field(default_factory=dict)
+
+    # Resolved once per source, because a check that also fetches a changelog
+    # makes several requests and the command behind this can be a vault unlock.
+    # None means "not yet asked", which an empty string cannot say.
+    _resolved_token: str | None = field(default=None, init=False, repr=False, compare=False)
+
+    def _credential(self) -> str:
+        if self._resolved_token is None:
+            self._resolved_token = self.token or token_from_env() or (self.token_func() if self.token_func else '') or token_from_command()
+        return self._resolved_token
 
     def latest_release(self) -> Release:
         if self.tag_prefix or self.allow_prerelease:
@@ -147,7 +226,7 @@ class GitHubSource:
         request.add_header('Accept', 'application/vnd.github+json')
         request.add_header('X-GitHub-Api-Version', '2022-11-28')
         request.add_header('User-Agent', 'pyselfupdate')
-        token = self.token or token_from_env() or (self.token_func() if self.token_func else '')
+        token = self._credential()
         if token:
             request.add_header('Authorization', f'Bearer {token}')
         for name, value in self.headers.items():
@@ -160,7 +239,7 @@ class GitHubSource:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310  # nosec B310
                 return json.load(response)
         except urllib.error.HTTPError as error:
-            raise _http_error(self.owner, self.repo, error) from error
+            raise _http_error(self.owner, self.repo, error, authenticated=bool(token)) from error
         except urllib.error.URLError as error:
             raise SelfUpdateSourceFailure(f'cannot reach {API}: {error.reason}') from error
         except json.JSONDecodeError as error:
@@ -176,7 +255,7 @@ class SelfUpdateSourceFailure(SourceError):
     """
 
 
-def _http_error(owner: str, repo: str, error: urllib.error.HTTPError) -> SelfUpdateError:
+def _http_error(owner: str, repo: str, error: urllib.error.HTTPError, *, authenticated: bool) -> SelfUpdateError:
     if error.code == 404:
         # A private repository reached without a token is indistinguishable
         # from one that does not exist, and saying so is more useful than
@@ -185,9 +264,45 @@ def _http_error(owner: str, repo: str, error: urllib.error.HTTPError) -> SelfUpd
     if error.code in (401, 403):
         remaining = error.headers.get('x-ratelimit-remaining') if error.headers else None
         if remaining == '0':
-            return SelfUpdateSourceFailure('GitHub API rate limit exceeded; set GITHUB_TOKEN to raise it')
+            return SelfUpdateSourceFailure(_rate_limit_message(error, authenticated=authenticated))
         return SelfUpdateSourceFailure(f'GitHub refused the request for {owner}/{repo} ({error.code})')
     return SelfUpdateSourceFailure(f'GitHub returned {error.code} for {owner}/{repo}')
+
+
+def _rate_limit_message(error: urllib.error.HTTPError, *, authenticated: bool) -> str:
+    """Which ceiling was hit, and what to do about that one.
+
+    The two are different problems with different fixes, and one sentence for
+    both sent the wrong instruction to whichever case it was not written for.
+    Telling someone to supply a token when the request already carried one is
+    the worse half: it reads as advice to go and configure something that is
+    already configured.
+
+    The authenticated case should be rare, so it says when the ceiling lifts
+    rather than what to change -- there is nothing to change.
+    """
+    resets = _reset_clock(error)
+    if authenticated:
+        return f"GitHub's authenticated rate limit (5,000/hour) is exhausted{resets}"
+    return (
+        "GitHub's anonymous rate limit (60/hour, shared by every host on this IP) is exhausted"
+        f'{resets}. Run `gh auth login`, or set GITHUB_TOKEN, for the 5,000/hour authenticated limit'
+    )
+
+
+def _reset_clock(error: urllib.error.HTTPError) -> str:
+    """`; resets at 14:22 UTC`, or nothing when the header is absent or unusable.
+
+    A wall-clock time rather than "in 43 minutes", because the message is read
+    out of a state file long after the request that produced it and a duration
+    would be counted from the wrong instant.
+    """
+    header = error.headers.get('x-ratelimit-reset') if error.headers else None
+    try:
+        moment = datetime.fromtimestamp(int(header or ''), tz=UTC)
+    except (TypeError, ValueError, OSError, OverflowError):
+        return ''
+    return f'; resets at {moment:%H:%M} UTC'
 
 
 def _quote(ref: str) -> str:

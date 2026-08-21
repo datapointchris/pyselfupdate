@@ -60,6 +60,12 @@ class StubSource:
 def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in GATE_VARIABLES:
         monkeypatch.delenv(name, raising=False)
+    # The token command defaults to `gh auth token`, so without this the suite
+    # reads the developer's own credential: it passes or fails on whether they
+    # happen to be logged in, and the token reaches assertion output on failure.
+    # A test that wants the default asks for it, and one that wants a token sets
+    # this to a command that prints one.
+    monkeypatch.setenv('GITHUB_TOKEN_COMMAND', '')
 
 
 @pytest.fixture

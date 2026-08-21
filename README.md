@@ -143,34 +143,54 @@ Config(
     repo='mytool',  # defaults to tool
     package='mytool',  # distribution name, defaults to tool
     version='1.2.3',  # defaults to the installed distribution's metadata
-    token='',  # defaults to $GITHUB_TOKEN, then $GH_TOKEN, then token_func
-    token_func=None,  # called only when a request is made; for a credential that costs a subprocess
+    token='',  # see Authentication below; you almost certainly want the default
+    token_func=None,  # a source of your own, tried before $GITHUB_TOKEN_COMMAND
     tag_prefix='',  # e.g. 'cli/' for tags like cli/v1.2.3
     allow_prerelease=False,
     source=None,  # a custom Source; anything with latest_release()
 )
 ```
 
-Without a token, GitHub allows 60 API requests per hour per IP and rejects
-private repositories outright. One check per day per tool is far inside that; a
-shared egress address is not.
+## Authentication
 
-A private repository therefore needs a real token, and the usual source is the
-`gh` CLI. Pass it as `token_func`, not `token`:
+**Authenticated by default. Configure nothing.** `GitHubSource` runs `gh auth
+token` when a request is about to be made, and sends what it prints.
 
-```python
-def gh_token() -> str:
-    result = subprocess.run(['gh', 'auth', 'token'], capture_output=True, text=True)
-    return result.stdout.strip() if result.returncode == 0 else ''
+The alternative is not "no credential". It is 60 requests an hour, charged **per
+IP address** and shared with every other anonymous caller behind the same
+egress. A default that has to be opted into is a default nobody sets.
 
+Four sources, first non-empty wins:
 
-Config(tool='mytool', owner='you', token_func=gh_token)
+| Source | Set by | Default |
+| --- | --- | --- |
+| `Config.token` | you, in code | unset |
+| `$GITHUB_TOKEN`, then `$GH_TOKEN` | whoever runs your CLI | unset |
+| `token_func()` | you, in code | unset |
+| `$GITHUB_TOKEN_COMMAND` | whoever runs your CLI | `gh auth token` |
+
+`$GITHUB_TOKEN_COMMAND` both redirects and disables, which is what a switch has
+to do to be worth having:
+
+```bash
+GITHUB_TOKEN_COMMAND='pass show github/token'   # use this instead
+GITHUB_TOKEN_COMMAND='op read op://vault/gh/token'
+GITHUB_TOKEN_COMMAND=''                         # run nothing, stay anonymous
 ```
 
-`token_func` is called only when a request is actually about to be made.
-Resolving the token eagerly into `token` instead puts that subprocess in front
-of every invocation of your CLI — including the overwhelming majority where the
-notify gate declines to check at all, which is otherwise free.
+It never raises. A command that is not installed, exits non-zero, or takes
+longer than ten seconds degrades to an unauthenticated request, which still
+works against a public repository.
+
+`token_func` is now only for a credential neither the environment nor a command
+can produce. It is called lazily, for the same reason the command is: the notify
+gate resolves a `Config` on every invocation and declines most of them without
+reaching the network, and a subprocess in front of that gate is the entire cost
+worth avoiding.
+
+**This lives on `GitHubSource`, not on `Config`.** A credential is the host's
+business — a `Source` for another forge brings its own variable and its own
+command, and nothing above the `Source` protocol learns either name.
 
 ## State
 

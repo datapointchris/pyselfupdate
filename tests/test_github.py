@@ -89,6 +89,9 @@ def test_sends_the_documented_api_headers(server: Recorder) -> None:
     _, headers = server.requests[0]
     assert headers['accept'] == 'application/vnd.github+json'
     assert headers['x-github-api-version'] == '2022-11-28'
+    # No header here only because the autouse fixture empties the token command.
+    # The default is authenticated; `test_the_token_command_runs_by_default`
+    # is what holds that.
     assert 'authorization' not in headers
 
 
@@ -127,8 +130,14 @@ def test_token_func_supplies_a_token_when_nothing_else_does(server: Recorder, mo
         ('', {'GITHUB_TOKEN': 'from-env'}),
     ],
 )
-def test_token_func_is_the_last_resort(server: Recorder, monkeypatch: pytest.MonkeyPatch, token: str, environment: dict[str, str]) -> None:
-    """A caller that already has a credential must never pay for the expensive one."""
+def test_token_func_is_skipped_when_a_cheaper_source_answered(
+    server: Recorder, monkeypatch: pytest.MonkeyPatch, token: str, environment: dict[str, str]
+) -> None:
+    """A caller that already has a credential must never pay for the expensive one.
+
+    Not "the last resort" any more: `token_from_command` runs after this, so what
+    the test holds is the skip rather than the position.
+    """
     monkeypatch.delenv('GITHUB_TOKEN', raising=False)
     monkeypatch.delenv('GH_TOKEN', raising=False)
     for name, value in environment.items():
@@ -283,3 +292,118 @@ def test_a_non_http_scheme_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(SourceError, match='only http and https'):
         source().latest_release()
+
+
+def printing(token: str) -> str:
+    """A token command that succeeds, spelled portably.
+
+    `printf` rather than `echo` because `shutil.which` has to find it on PATH
+    and the shell builtin is not a file anywhere.
+    """
+    return f'printf {token}'
+
+
+def test_the_token_command_runs_by_default(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Authenticating is the default. The alternative is not "no credential" but
+    sixty requests an hour charged per IP address."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+    monkeypatch.setenv('GITHUB_TOKEN_COMMAND', printing('from-command'))
+
+    source().latest_release()
+
+    assert server.requests[0][1]['authorization'] == 'Bearer from-command'
+
+
+def test_an_empty_token_command_disables_authentication(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The lever has to turn the thing off as well as redirect it, or it is not
+    a switch and the default may as well be hardcoded."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+    monkeypatch.setenv('GITHUB_TOKEN_COMMAND', '')
+
+    source().latest_release()
+
+    assert 'authorization' not in server.requests[0][1]
+
+
+def test_a_failing_token_command_degrades_to_anonymous(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A vault that is locked, or a helper that is not installed, must not fail
+    the update check. Anonymous still works against a public repository."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+    monkeypatch.setenv('GITHUB_TOKEN_COMMAND', 'false')
+
+    source().latest_release()
+
+    assert 'authorization' not in server.requests[0][1]
+
+
+def test_a_token_command_that_is_not_installed_degrades_to_anonymous(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+    monkeypatch.setenv('GITHUB_TOKEN_COMMAND', 'no-such-binary-anywhere --token')
+
+    source().latest_release()
+
+    assert 'authorization' not in server.requests[0][1]
+
+
+def test_the_environment_beats_the_command(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A user who exported a token meant that one, and it costs no subprocess."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+    monkeypatch.setenv('GITHUB_TOKEN', 'from-env')
+    monkeypatch.setenv('GITHUB_TOKEN_COMMAND', printing('from-command'))
+
+    source().latest_release()
+
+    assert server.requests[0][1]['authorization'] == 'Bearer from-env'
+
+
+def test_a_callers_own_source_beats_the_command(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`token_func` is now for a credential neither the environment nor a command
+    can produce, so it has to win over the default."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+    monkeypatch.setenv('GITHUB_TOKEN_COMMAND', printing('from-command'))
+
+    source(token_func=lambda: 'from-func').latest_release()
+
+    assert server.requests[0][1]['authorization'] == 'Bearer from-func'
+
+
+def test_the_command_runs_once_per_source(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A check that also fetches a changelog makes several requests, and the
+    command behind this can be a vault unlock with a touch prompt."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
+    server.routes['/repos/datapointchris/demo/compare/v1.0.0...v1.1.0'] = (200, {'commits': []})
+    calls = 0
+
+    def counted() -> str:
+        nonlocal calls
+        calls += 1
+        return 'tok'
+
+    monkeypatch.setattr('pyselfupdate.github.token_from_command', counted)
+
+    built = source()
+    built.latest_release()
+    built.changelog('v1.0.0', 'v1.1.0')
+
+    assert calls == 1
+
+
+def test_an_anonymous_rate_limit_names_the_anonymous_ceiling(server: Recorder) -> None:
+    """The two ceilings are different problems with different fixes. One
+    sentence for both misadvised whichever case it was not written for."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (403, {'message': 'rate limit'})
+
+    with pytest.raises(SourceError, match='anonymous rate limit'):
+        source().latest_release()
+
+
+def test_an_authenticated_rate_limit_does_not_advise_supplying_a_token(server: Recorder) -> None:
+    """Telling someone to set a token when the request already carried one reads
+    as advice to configure something that is already configured."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (403, {'message': 'rate limit'})
+
+    with pytest.raises(SourceError) as raised:
+        source(token='secret').latest_release()
+
+    assert 'authenticated rate limit' in str(raised.value)
+    assert 'GITHUB_TOKEN' not in str(raised.value)
