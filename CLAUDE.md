@@ -37,13 +37,15 @@ to the function and fail on attribute access. Do not rename them back.
 
 ## Constraints that must not regress
 
-- **The package has zero runtime dependencies.** CI enforces it two ways: the
+- **The package has zero runtime dependencies**, and CI enforces it two ways: the
   declared list must be empty, and every core module must import in a venv
-  containing nothing else. This is the library's main differentiator — adding an
-  update notice to a CLI should not drag in an HTTP client, a TOML parser and a
-  version library.
+  containing nothing else. That second check is this repo's own — adding an update
+  notice to a CLI should not drag in an HTTP client, a TOML parser and a version
+  library.
 - **typer stays confined to `typercmd.py`,** installed via the `typer` extra.
-  Go gets this for free through module graph pruning; Python needs the extra.
+  Containment is `standards/repo-structure.md` § "A library keeps its dependencies
+  off its consumers' surface", which names this repo; the extra is what Python needs
+  to get what Go gets free from module graph pruning.
 - **The floor is Python 3.11 and CI tests against it.** This is a sanctioned
   exception to the fleet's 3.13 floor, recorded in `standards/python.md`:
   3.11 is what `tomllib` requires, which is what lets uv's receipt be read
@@ -95,15 +97,15 @@ local and never nagged.
 
 ## Testing
 
-Everything runs offline. `StubSource` in `conftest.py` serves fixed releases;
-`test_github.py` drives the real `urllib` path against a local `http.server`.
+The two-layer shape — `StubSource` in `conftest.py` for the logic, `test_github.py`
+against a local `http.server` for the wire — is `standards/testing.md` § "A network
+client tests offline against a stub, plus one test against a local server".
+Everything runs offline.
 
-**Terminal detection is injected, never faked by reassigning `sys.stdout`.**
-pytest's capture reinstalls its own streams between fixture setup and the test
-call, so a monkeypatched `sys.stdout` silently reverts and every gate test
-passes for the wrong reason. `notify(interactive=...)` and
-`_is_interactive(streams)` exist for this, and the second is also a genuine
-public affordance for a program writing into a pager.
+**Terminal detection is injected, never faked by reassigning `sys.stdout`** —
+`standards/python.md` § "Inject terminal detection; never monkeypatch it" carries
+the pytest-capture reason and the pager affordance. The seams here are
+`notify(interactive=...)` and `_is_interactive(streams)`.
 
 `clean_environment` is autouse and clears every variable the gate reads, so a
 developer's own `CI=1` cannot change the result.
