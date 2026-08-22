@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.3.2 (2026-08-22)
+
+### Bug Fixes
+
+- Never check for updates while printing a help screen
+  ([`f2b4c8b`](https://github.com/datapointchris/pyselfupdate/commit/f2b4c8bfd3f4034229d486b54730de736a5c774e))
+
+Click and Typer run a group's callback before answering a subcommand's --help, so a notice called
+  from that callback fires while a help screen is printed. Nothing a notice is for happens there,
+  and the check costs a releases-API call and a state write every time.
+
+It lands hardest on a reader that walks a tool's help. Measured 2026-08-22: reading doit's twenty
+  commands meant twenty-one invocations, each one reaching this, and eighteen tools on that machine
+  write their autoupdate state on plain --help.
+
+The reason is a new Skip.HELP and it is checked in enabled(), so `<tool> update --why` reports it
+  like every other reason.
+
+A -- ends the scan, because everything after it is the command's own argument. Skipping when it
+  should not have costs a missed notice, which is the cheap direction to be wrong.
+
+
 ## v0.3.1 (2026-08-21)
 
 ### Bug Fixes
