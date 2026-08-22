@@ -7,6 +7,7 @@ consulted. A skip that still hits the network is a skip that failed.
 
 from __future__ import annotations
 
+import sys
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -241,3 +242,28 @@ def test_the_tool_interval_outranks_the_fleet_interval(pinned, state_home: Path,
     notify(config(source), defer=False, interactive=True, out=out)
 
     assert source.calls == 2
+
+
+@pytest.mark.parametrize('argv', [['--help'], ['-h'], ['list', '--help'], ['list', '-h']])
+def test_a_help_screen_is_never_notified(pinned, state_home: Path, out, monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
+    """Click runs a group's callback before answering a subcommand's --help.
+
+    Nothing a notice is for happens on a help screen, and the check costs a
+    releases-API call and a state write every time one is printed.
+    """
+    monkeypatch.setattr(sys, 'argv', ['demo', *argv])
+    source = StubSource(tag='v2.0.0')
+
+    assert notify(config(source), defer=False, interactive=True, out=out).skip is Skip.HELP
+    assert source.calls == 0
+    assert out.lines == []
+
+
+@pytest.mark.parametrize('argv', [['list'], [], ['run', '--', '--help'], ['--json']])
+def test_ordinary_command_lines_are_still_notified(pinned, state_home: Path, out, monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
+    """Everything after `--` is the command's own argument, not a request for help."""
+    monkeypatch.setattr(sys, 'argv', ['demo', *argv])
+    source = StubSource(tag='v2.0.0')
+
+    assert notify(config(source), defer=False, interactive=True, out=out).skip is not Skip.HELP
+    assert source.calls == 1

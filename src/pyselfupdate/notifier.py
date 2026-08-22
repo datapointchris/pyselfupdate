@@ -45,6 +45,7 @@ class Skip(Enum):
     NOT_A_TTY = 'not-a-tty'
     CI = 'ci'
     INTERVAL = 'interval'
+    HELP = 'help'
     FAILED = 'failed'
 
 
@@ -102,6 +103,8 @@ def enabled(config: Config, *, interactive: bool | None = None) -> tuple[bool, S
     """
     if _disabled_by_env(config.tool):
         return False, Skip.DISABLED
+    if _asking_for_help():
+        return False, Skip.HELP
     if not (_is_interactive() if interactive is None else interactive):
         return False, Skip.NOT_A_TTY
     if _in_ci():
@@ -109,6 +112,30 @@ def enabled(config: Config, *, interactive: bool | None = None) -> tuple[bool, S
     if _is_local_install(config.tool):
         return False, Skip.LOCAL_INSTALL
     return True, None
+
+
+def _asking_for_help() -> bool:
+    """Whether the command line asks for help rather than for work.
+
+    Click and Typer run a group's callback before answering a subcommand's
+    `--help`, so a notice called from that callback fires while printing a help
+    screen. Nothing a notice is for happens on a help screen, and the check
+    costs a releases-API call and a state write every time.
+
+    It lands hardest on a reader that walks a tool's help. Measured 2026-08-22:
+    reading doit's twenty commands meant twenty-one invocations, each one
+    reaching this.
+
+    A `--` ends the scan, because everything after it is the command's own
+    argument. Skipping when it should not have costs a missed notice, which is
+    the cheap direction to be wrong in.
+    """
+    for arg in sys.argv[1:]:
+        if arg == '--':
+            return False
+        if arg in {'--help', '-h'}:
+            return True
+    return False
 
 
 def _notify(
