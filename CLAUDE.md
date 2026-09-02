@@ -127,7 +127,11 @@ that mistake.
 
 **A PyPI version cannot be replaced, only yanked, and the name is claimed
 forever.** Same class of irreversibility as a Go module tag once the proxy has
-cached it. Update `CHANGELOG.md` in the same commit.
+cached it.
+
+The changelog is the GitHub release body, written by python-semantic-release
+from the commit subjects in the release. Nothing commits it back to the repo, so
+the commit message is where a change explains itself to a consumer.
 
 After releasing, bump consumers with `uv add pyselfupdate@latest`. During
 development, point a consumer at the local checkout with `tool.uv.sources`

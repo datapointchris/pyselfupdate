@@ -10,6 +10,10 @@ permissions:
 jobs:
   # python-semantic-release decides the version, writes it into pyproject.toml,
   # tags, and creates the GitHub release.
+  #
+  # changelog: false because the release body is the changelog. `changelog` in
+  # this library reads commit subjects between two tags from the releases API,
+  # so no consumer and no command reads a tracked file.
   version:
     runs-on: ubuntu-latest
     permissions:
@@ -26,6 +30,7 @@ jobs:
         id: release
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          changelog: false
 
   # A separate job, in the same workflow, gated on the one above.
   #
