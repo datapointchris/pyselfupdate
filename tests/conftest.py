@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from pyselfupdate import state
 from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.source import Release
 
@@ -134,7 +135,8 @@ def out() -> FakeStream:
 
 
 def written_state(state_home: Path, tool: str) -> dict:
-    return json.loads((state_home / tool / 'autoupdate.json').read_text(encoding='utf-8'))
+    path = state_home / tool / state.filename(state.machine())
+    return json.loads(path.read_text(encoding='utf-8'))
 
 
 def environ_without(*names: str) -> dict[str, str]:

@@ -1,8 +1,8 @@
-"""The per-tool state file.
+"""The per-tool, per-machine state file.
 
 One schema, shared byte-for-byte with goselfupdate and bashselfupdate, so that
 any tool can read any other tool's state and a single dashboard can glob
-`~/.local/state/*/autoupdate.json` with no per-tool knowledge.
+`~/.local/state/*/autoupdate-*.json` with no per-tool knowledge.
 
 State, not config and not cache: it persists across runs, it is not authored by
 the user, and deleting it changes behaviour rather than merely costing a
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from dataclasses import asdict
 from dataclasses import dataclass
 from datetime import UTC
@@ -21,7 +22,45 @@ from datetime import datetime
 from pathlib import Path
 
 SCHEMA = 1
-FILENAME = 'autoupdate.json'
+
+#: Names the file when the host cannot be read, so a filename is always
+#: well-formed and two unidentifiable boxes collide only with each other.
+UNKNOWN_MACHINE = 'unknown'
+
+
+def machine() -> str:
+    """The box this process runs on: bare hostname, no domain, lowercased.
+
+    goselfupdate and bashselfupdate derive it the same way, so the three write
+    interleaved files a single reader can enumerate.
+    """
+    try:
+        return canonical_machine(socket.gethostname())
+    except OSError:
+        return UNKNOWN_MACHINE
+
+
+def canonical_machine(name: str) -> str:
+    """A hostname from any source, reduced to the form `machine` records.
+
+    A hostname reaches a reader fully qualified as often as bare, so a
+    comparison against a recorded name has to canonicalize both sides or it
+    fails on every host.
+    """
+    return name.strip().lower().split('.')[0] or UNKNOWN_MACHINE
+
+
+def filename(machine_name: str) -> str:
+    """The file one machine writes inside a tool's state directory.
+
+    The machine is part of the name because a state directory is a synced
+    directory on some installations, and a file syncer has no merge: two boxes
+    writing one path leaves one winner plus a conflict copy nobody reads. Both
+    fields this file carries — the version installed here and the instant this
+    box last checked — describe one machine, so the split costs nothing and
+    makes the collision unreachable.
+    """
+    return f'autoupdate-{machine_name}.json'
 
 
 @dataclass
@@ -54,7 +93,8 @@ def state_home() -> Path:
 
 
 def state_path(tool: str) -> Path:
-    return state_home() / tool / FILENAME
+    """Where this machine's state for a tool lives."""
+    return state_home() / tool / filename(machine())
 
 
 def read(tool: str) -> State:

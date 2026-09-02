@@ -27,7 +27,7 @@ from goselfupdate".
 | `install.py` | Reading uv's receipt, running `uv tool install`, re-exec |
 | `updater.py` | `check`, `update`, `changelog` |
 | `notifier.py` | The gate, the interval, the notice |
-| `state.py` | The shared `autoupdate.json` schema |
+| `state.py` | The shared `autoupdate-<machine>.json` schema, and the machine derivation that names it |
 | `typercmd.py` | The typer `update` command. The only module importing typer |
 
 `updater.py` and `notifier.py` are named for the module, not the function they
@@ -52,6 +52,10 @@ to the function and fail on attribute access. Do not rename them back.
   without a dependency. Raising it excludes callers.
 - **Errors are typed.** A new failure mode gets a class in `errors.py`; callers
   must never have to match on message text.
+- **The machine in the state filename is derived identically in all three
+  siblings** — bare hostname, domain dropped, lowercased, `unknown` when it
+  cannot be read. A library deriving it differently puts one box's state under
+  two names, and neither box then sees the other's.
 
 The self-update design rules — notify never raises or prints, the timestamp is
 stamped before the network call, version comparison stays byte-compatible with

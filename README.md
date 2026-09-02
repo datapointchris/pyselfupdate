@@ -194,7 +194,8 @@ command, and nothing above the `Source` protocol learns either name.
 
 ## State
 
-`${XDG_STATE_HOME:-~/.local/state}/<tool>/autoupdate.json`, written atomically:
+`${XDG_STATE_HOME:-~/.local/state}/<tool>/autoupdate-<machine>.json`, written
+atomically:
 
 ```json
 {
@@ -213,6 +214,13 @@ the user, and deleting it changes behaviour rather than merely costing a
 recompute. That is `XDG_STATE_HOME` by the Base Directory specification, and it
 is where `gh` puts the same thing.
 
+`<machine>` is the bare lowercased hostname, from `state.machine()`. It is in
+the name because both fields that vary — the version installed here, and the
+instant this box last checked — describe one machine. A state directory shared
+between machines, by a file syncer or a network home directory, otherwise has
+two writers on one path and reports whichever wrote last as the state of all of
+them.
+
 The timestamp is written **before** the network call. `gh` stamps only on
 success, so a rate-limited or offline user re-hits the API on every invocation
 until the window resets; an interval exists to bound the request rate, and only
@@ -220,11 +228,10 @@ this ordering actually does that.
 
 ## Siblings
 
-The same two-layer design in other languages. **`update` exists in all three;
-the `notify` layer, the shared `autoupdate.json` schema and the
-`NO_AUTO_UPDATE` contract are implemented in this library and in its bash
-sibling, and are still to be added to goselfupdate** — until then goselfupdate
-provides the update half only.
+The same two-layer design in other languages. All three carry both layers, and
+they share the `autoupdate-<machine>.json` schema, the machine derivation that
+names it, and the `NO_AUTO_UPDATE` contract. They do not share an API, because
+"update" means a different operation in each.
 
 - [goselfupdate](https://github.com/datapointchris/goselfupdate) — replaces a Go binary
 - [bashselfupdate](https://github.com/datapointchris/bashselfupdate) — moves a git checkout to its newest tag
