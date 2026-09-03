@@ -23,7 +23,7 @@ from pyselfupdate.source import Release
 class Result:
     """What an update found, whether or not it installed anything."""
 
-    # The running version, canonicalised with a leading "v".
+    # The running version, canonicalized with a leading "v".
     current: str
 
     # The version now installed, or the one `update` would install after a
@@ -129,7 +129,7 @@ def changelog(config: Config, from_version: str, to_version: str) -> list[str]:
 
 
 def _current_version(config: Config) -> str:
-    """The running version, canonicalised, rejecting one that is not a release.
+    """The running version, canonicalized, rejecting one that is not a release.
 
     An install that tracks a git branch rather than a tag reports whatever
     version was in pyproject.toml when it was built, which says nothing about
