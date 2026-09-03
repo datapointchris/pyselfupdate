@@ -202,7 +202,7 @@ def test_enabled_reports_the_reason_without_touching_the_network(pinned, monkeyp
 
 
 def test_state_carries_both_timestamp_forms(pinned, state_home: Path, out) -> None:
-    """The epoch field is what lets the bash implementation do the same maths."""
+    """The epoch field is what lets the bash implementation do the same math."""
     notify(config(StubSource(tag='v2.0.0')), defer=False, interactive=True, out=out)
 
     stored = written_state(state_home, 'demo')

@@ -18,7 +18,7 @@ class LocalInstallError(SelfUpdateError):
     """The tool was installed from a local path or as an editable checkout.
 
     Reinstalling would discard a working copy for a release that may be older,
-    with no way to tell which is newer. This is the analogue of goselfupdate's
+    with no way to tell which is newer. This is the analog of goselfupdate's
     ErrDevBuild.
     """
 

@@ -215,7 +215,7 @@ class GitHubSource:
     def _get(self, path: str):
         url = f'{API}{path}'
 
-        # urlopen honours file:, ftp: and data: as readily as http:. API is a
+        # urlopen honors file:, ftp: and data: as readily as http:. API is a
         # constant here, but it is a module attribute a caller can reassign --
         # tests do exactly that -- so the scheme is checked rather than assumed.
         # Without this, setting it to a file: URL turns a release check into an
@@ -237,7 +237,7 @@ class GitHubSource:
         try:
             # B310 is a call blacklist rather than a dataflow check, so it fires
             # on urlopen regardless of the scheme guard above. That guard, and
-            # test_a_non_http_scheme_is_refused, are the actual defence.
+            # test_a_non_http_scheme_is_refused, are the actual defense.
             with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310  # nosec B310
                 return json.load(response)
         except urllib.error.HTTPError as error:

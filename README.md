@@ -210,7 +210,7 @@ atomically:
 ```
 
 State, not config and not cache: it persists across runs, it is not authored by
-the user, and deleting it changes behaviour rather than merely costing a
+the user, and deleting it changes behavior rather than merely costing a
 recompute. That is `XDG_STATE_HOME` by the Base Directory specification, and it
 is where `gh` puts the same thing.
 
@@ -239,6 +239,6 @@ names it, and the `NO_AUTO_UPDATE` contract. They do not share an API, because
 Version precedence is deliberately identical across all three, so a tool and
 its siblings never disagree about which release is newer.
 
-## Licence
+## License
 
 MIT

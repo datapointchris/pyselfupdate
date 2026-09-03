@@ -2,12 +2,12 @@
 
 Implemented here rather than taken from `packaging` so that this package has no
 third-party dependencies. `packaging` also implements PEP 440, whose precedence
-rules differ from semver's in ways that matter: it normalises `1.0.0-rc.1` to
+rules differ from semver's in ways that matter: it normalizes `1.0.0-rc.1` to
 `1.0.0rc1` and orders `1.0.0.post1` above `1.0.0`, neither of which describes a
 git tag.
 
 Precedence follows https://semver.org section 11, and is byte-for-byte the same
-behaviour as goselfupdate's semver.go so that the two libraries never disagree
+behavior as goselfupdate's semver.go so that the two libraries never disagree
 about which of two releases is newer.
 """
 

@@ -70,7 +70,7 @@ rule rather than a collection of individual try/excepts.
 goselfupdate replaces a running binary: it needs `Source`, `Verifier`,
 archive extraction and an atomic rename. A uv tool has no binary and no archive
 — `uv tool install --force` rebuilds the virtual environment the running
-interpreter lives in. So roughly 80% of goselfupdate's surface has no analogue
+interpreter lives in. So roughly 80% of goselfupdate's surface has no analog
 here, and this package has one thing goselfupdate does not need: `reexec`.
 
 That difference is load-bearing, not cosmetic. Replacing a Unix binary is safe
@@ -83,7 +83,7 @@ mode.
 ## Detecting a build that must not be updated
 
 goselfupdate rejects a dev build by its version string, because Go stamps a
-recognisable pseudo-version onto local builds. That signal does not exist here,
+recognizable pseudo-version onto local builds. That signal does not exist here,
 and a Go pseudo-version is in any case perfectly valid semver — `version.py`
 parses it happily, and `test_a_go_pseudo_version_is_valid_semver` documents why
 that is correct.

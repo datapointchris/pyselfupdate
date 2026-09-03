@@ -5,7 +5,7 @@ any tool can read any other tool's state and a single dashboard can glob
 `~/.local/state/*/autoupdate-*.json` with no per-tool knowledge.
 
 State, not config and not cache: it persists across runs, it is not authored by
-the user, and deleting it changes behaviour rather than merely costing a
+the user, and deleting it changes behavior rather than merely costing a
 recompute. That is `XDG_STATE_HOME` by the Base Directory specification, and it
 is where `gh` puts the same thing.
 """

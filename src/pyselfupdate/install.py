@@ -1,6 +1,6 @@
 """Reading and rewriting a uv tool installation.
 
-This is the part with no analogue in goselfupdate. A Go tool updates by
+This is the part with no analog in goselfupdate. A Go tool updates by
 replacing one file; a uv tool updates by rebuilding the virtual environment its
 own interpreter is running inside, which is why `update` must be the last thing
 a process does before it exits or re-execs.
