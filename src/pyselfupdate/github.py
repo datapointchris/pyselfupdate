@@ -6,6 +6,7 @@ this package is that adding it to a project adds nothing else.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import shlex
@@ -19,6 +20,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from datetime import UTC
 from datetime import datetime
+from typing import IO
 
 from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.errors import SelfUpdateError
@@ -27,6 +29,49 @@ from pyselfupdate.source import Release
 
 API = 'https://api.github.com'
 DEFAULT_TIMEOUT = 10.0
+
+
+def _origin(url: str) -> tuple[str, str]:
+    """Scheme and authority, which is what decides whether a credential travels.
+
+    Port is part of it. Two ports on one host are two origins, and treating them
+    as one is how a redirect to a service sharing a hostname gets the token.
+    """
+    split = urllib.parse.urlsplit(url)
+    return split.scheme, split.netloc
+
+
+class _CredentialScopedRedirects(urllib.request.HTTPRedirectHandler):
+    """Drop `Authorization` when a redirect leaves the origin it was sent to.
+
+    `urllib.request` carries the header to the new host instead. Measured across
+    3.11, 3.13 and 3.14 with two local servers: a `Bearer` sent to the first
+    arrives intact at the second on every one of them. So this is the library's
+    to do, at every version it supports, rather than something a floor bump ends.
+
+    It matters here because `API` is a reassignable module attribute and
+    `headers` is caller-supplied, which is what makes a redirect off GitHub
+    something other than hypothetical.
+    """
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: http.client.HTTPMessage,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None or _origin(req.full_url) == _origin(newurl):
+            return redirected
+        redirected.headers = {name: value for name, value in redirected.headers.items() if name.lower() != 'authorization'}
+        return redirected
+
+
+_OPENER = urllib.request.build_opener(_CredentialScopedRedirects)
+"""Built once. Passing a `HTTPRedirectHandler` subclass replaces the default one."""
 
 
 # B105 reads any name carrying "token" as a credential. Both hold the name of a
@@ -235,10 +280,7 @@ class GitHubSource:
             request.add_header(name, value)
 
         try:
-            # B310 is a call blacklist rather than a dataflow check, so it fires
-            # on urlopen regardless of the scheme guard above. That guard, and
-            # test_a_non_http_scheme_is_refused, are the actual defense.
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310  # nosec B310
+            with _OPENER.open(request, timeout=self.timeout) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
             raise _http_error(self.owner, self.repo, error, authenticated=bool(token)) from error

@@ -407,3 +407,58 @@ def test_an_authenticated_rate_limit_does_not_advise_supplying_a_token(server: R
 
     assert 'authenticated rate limit' in str(raised.value)
     assert 'GITHUB_TOKEN' not in str(raised.value)
+
+
+def test_a_bearer_does_not_follow_a_redirect_off_its_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """urllib carries `Authorization` to the new host; this library must not.
+
+    Measured on 3.11, 3.13 and 3.14: a bearer sent to the first server arrives
+    intact at the second on all of them, so no floor bump retires this test.
+    Two ports on 127.0.0.1 are two origins, which is what makes this reachable
+    without a second hostname.
+    """
+    landed: dict[str, str | None] = {}
+
+    class Destination(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's interface
+            landed['authorization'] = self.headers.get('Authorization')
+            body = json.dumps({'tag_name': 'v1.0.0'}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    destination = HTTPServer(('127.0.0.1', 0), Destination)
+    threading.Thread(target=destination.serve_forever, daemon=True).start()
+    elsewhere = f'http://127.0.0.1:{destination.server_port}/landed'
+
+    class Redirector(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's interface
+            self.send_response(302)
+            self.send_header('Location', elsewhere)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    redirector = HTTPServer(('127.0.0.1', 0), Redirector)
+    threading.Thread(target=redirector.serve_forever, daemon=True).start()
+
+    monkeypatch.setattr('pyselfupdate.github.API', f'http://127.0.0.1:{redirector.server_port}')
+
+    try:
+        source(token='secret').latest_release()
+    finally:
+        for httpd in (redirector, destination):
+            httpd.shutdown()
+            httpd.server_close()
+
+    # The redirect has to have been followed for the header check to mean
+    # anything; an unreached destination would satisfy it vacuously.
+    assert 'authorization' in landed
+    assert landed['authorization'] is None

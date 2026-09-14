@@ -42,6 +42,20 @@ to the function and fail on attribute access. Do not rename them back.
   containing nothing else. That second check is this repo's own — adding an update
   notice to a CLI should not drag in an HTTP client, a TOML parser and a version
   library.
+
+  **`httpx2` was weighed against this and declined**, which `python.md` otherwise
+  names as the fleet's client. It arrives with `httpcore2`, `anyio`, `idna`,
+  `h11` and `truststore` — six packages, about 57,000 lines, agreed by `uv tree`
+  and a metadata walk. Nine repos depend on this one and five of them declare no
+  HTTP client at all, so those five would inherit the whole closure for having
+  wanted a self-update check.
+
+  What it would buy does not reach here. This package makes one request, to
+  `api.github.com`, for JSON. It downloads no assets: `install.run_install`
+  shells out to `uv tool install --force`, so there is no CDN redirect for a
+  token to leak into, and nothing needs a client object, connection reuse or
+  streaming. Revisit if a second HTTP need appears — at that point the closure
+  is buying something.
 - **typer stays confined to `typercmd.py`,** installed via the `typer` extra.
   Containment is `standards/repo-structure.md` § "A library keeps its dependencies
   off its consumers' surface", which names this repo; the extra is what Python needs
