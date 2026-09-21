@@ -1,4 +1,4 @@
-name: Bespoke CI
+name: "Cross-platform: macOS, Windows, Python 3.11, packaging"
 
 on:
   push:
