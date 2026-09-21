@@ -29,7 +29,7 @@ jobs:
       released: ${{ steps.release.outputs.released }}
       tag: ${{ steps.release.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -57,13 +57,13 @@ jobs:
       # configured to accept a short-lived OIDC credential from this workflow.
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The tag, not the branch: main may already have moved, and the
           # artifact must be built from exactly what was released.
           ref: ${{ needs.version.outputs.tag }}
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
 
       - run: uv build
 
