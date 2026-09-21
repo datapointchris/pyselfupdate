@@ -1,9 +1,9 @@
 name: "Cross-platform: macOS, Windows, Python 3.11, packaging"
 
+# No push trigger: release.yml calls this on every push to main.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read

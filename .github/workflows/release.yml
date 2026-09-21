@@ -19,8 +19,11 @@ jobs:
   validate:
     uses: ./.github/workflows/validate.yml
 
+  cross-platform:
+    uses: ./.github/workflows/cross-platform.yml
+
   release:
-    needs: validate
+    needs: [validate, cross-platform]
     uses: datapointchris/reusable-workflows/.github/workflows/python-semantic-release.yml@v1
     permissions:
       contents: write
