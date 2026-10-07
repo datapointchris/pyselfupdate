@@ -108,7 +108,7 @@ or a local path. That is strictly better than inferring it at runtime: the
 installer knows how the tool got there and the running program does not. Three
 kinds are refused — `LOCAL` (a path or editable checkout), and `GIT` with no
 `rev=` (tracking a branch, so its version says nothing about how far behind it
-is). The second is what `relate` and `indy` look like today.
+is).
 
 Failing closed matters here: a tool that cannot be identified is treated as
 local and never nagged.
