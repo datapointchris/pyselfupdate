@@ -173,8 +173,8 @@ class GitHubSource:
     # notify gate declines to check at all. That gate is otherwise free, and a
     # spawn in front of it is the entire cost.
     #
-    # Reaching for `gh` no longer needs one: that is the default below. This is
-    # for a credential neither the environment nor a command can produce.
+    # `gh` needs no `token_func`, because it is the default below. This is for a
+    # credential neither the environment nor a command can produce.
     token_func: Callable[[], str] | None = None
 
     timeout: float = DEFAULT_TIMEOUT

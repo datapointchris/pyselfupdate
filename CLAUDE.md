@@ -9,7 +9,7 @@ public API, the README and the docstrings as the product — a change that is
 merely convenient for the internal consumers is not automatically right.
 
 It is the Python sibling of `~/tools/goselfupdate` and `~/tools/bashselfupdate`.
-The three deliberately share conventions and version precedence. All three now
+The three deliberately share conventions and version precedence. All three
 have a notify layer — goselfupdate's is `autoupdate/autoupdate.go`. The
 state-file schema and the environment-variable contract are shared across all
 three, so a rename in one breaks the other two; see
@@ -124,8 +124,8 @@ Everything runs offline.
 The install has the same two layers. `StubLock` stands in for `read_lock` in the
 updater and typercmd tests. `test_lock.py` runs real git and real uv against
 repositories and a wheel directory it builds under tmp, with uv offline and
-every tool directory redirected there. It is the only test that proves what the
-pins do.
+every tool directory redirected there. No other test shows what the pins do to
+an install.
 
 **Terminal detection is injected, never faked by reassigning `sys.stdout`** —
 `standards/python.md` § "Inject terminal detection; never monkeypatch it" carries

@@ -6,11 +6,11 @@ own interpreter is running inside, which is why `update` must be the last thing
 a process does before it exits or re-execs.
 
 `uv tool install` never reads a lock. Handed `<tool> @ git+<url>@<tag>`, it
-resolves every dependency afresh, so the tool would run on whatever was newest
-that day while its CI tested the lock. A git install is therefore held to the
-`uv.lock` at the tag being installed: `read_lock` exports it, and `run_install`
-hands the result to uv. uv records both lists in the receipt, so
-`uv tool upgrade` keeps the install held to them.
+resolves every dependency to its newest version, while the tool's CI tested the
+versions in its `uv.lock`. So a git install is held to the lock at the tag being
+installed: `read_lock` turns it into constraints and overrides, and
+`run_install` passes them to uv. uv records both in the receipt, so a later
+`uv tool upgrade` stays held to them.
 """
 
 from __future__ import annotations
@@ -38,12 +38,12 @@ RECEIPT_NAME = 'uv-receipt.toml'
 LOCK_NAME = 'uv.lock'
 
 EXPORT = ('export', '--frozen', '--no-default-groups', '--no-emit-workspace', '--no-hashes', '--no-header', '--no-annotate')
-"""The runtime closure as the lock records it, without the project's own packages.
+"""The lock's runtime dependencies, one requirement per line.
 
 `--no-emit-workspace` leaves out the tool itself and any workspace member, which
-the commit being installed already pins. `--no-hashes` because uv does not check
-the hashes a constraints file carries, and keeping them would imply a
-verification nothing performs.
+the commit being installed already pins. `--no-hashes` keeps each requirement
+on one line: uv writes every hash as a continuation line, and
+`_pins_from_export` reads line by line.
 """
 
 
@@ -75,8 +75,10 @@ class Installation:
     # editable back.
     with_requirements: tuple[str, ...] = ()
 
-    # Requirements no line can reproduce. Reading one must not fail, or the
-    # notify gate would go silent; `update` refuses instead of dropping it.
+    # Names of the receipt requirements `_requirement_line` returns None for.
+    # `read_installation` records them rather than raising: the notify gate
+    # treats a failed read as a local install and prints no notice. `update`
+    # raises NotInstalledError on them instead of dropping them.
     _unrebuildable: tuple[str, ...] = field(default=(), repr=False)
 
     def is_updatable(self) -> bool:
@@ -164,7 +166,11 @@ _LINE_KEYS = frozenset({'name', 'extras', 'marker', 'specifier', 'git', 'subdire
 
 
 def _requirement_line(requirement: dict) -> str | None:
-    """A receipt requirement as a requirements-file line, or None for a shape outside `_LINE_KEYS`."""
+    """A receipt requirement as a requirements-file line, or None when no line reproduces it.
+
+    None covers a key outside `_LINE_KEYS`, an editable carrying extras or a
+    marker, and a relative path.
+    """
     name = requirement.get('name')
     if not name or set(requirement) - _LINE_KEYS:
         return None
@@ -191,7 +197,10 @@ def _requirement_line(requirement: dict) -> str | None:
 
 
 def _file_uri(path: str) -> str:
-    """A `file://` URI for an absolute path, or an empty string for a relative one, which has no fixed meaning."""
+    """A `file://` URI for an absolute path, or an empty string for a relative one.
+
+    The receipt does not record what a relative path is relative to.
+    """
     candidate = Path(path)
     return candidate.as_uri() if candidate.is_absolute() else ''
 
@@ -214,12 +223,13 @@ def requirement_for(installation: Installation, ref: str) -> str:
 
 @dataclass(frozen=True)
 class Pins:
-    """What a `uv.lock` pins, split into the two forms `uv tool install` takes.
+    """What a `uv.lock` pins, as `--constraints` lines and `--overrides` lines.
 
     A registry pin is a constraint, which holds a package to the locked version
-    without adding it. A URL pin has to be an override: uv refuses a constraint
-    whose URL differs from the one the package declares, and a lock records
-    `git+<repo>@<commit>` where the package declared `git+<repo>`.
+    without adding it. A URL pin has to be an override. A lock records
+    `git+<repo>@<commit>` where the package declared `git+<repo>`, and uv
+    refuses a constraint whose URL differs from the declared one with
+    `Requirements contain conflicting URLs`.
     """
 
     constraints: tuple[str, ...] = ()
@@ -243,17 +253,18 @@ class Pins:
 def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
     """What the `uv.lock` at `ref` of a git repository pins, or None when it has none.
 
-    `extras` are the tool's own, as it is installed. Their dependencies are
-    pinned only when named, because a default export leaves them out, and
-    `--all-extras` is refused by a project declaring two extras as conflicting.
+    `extras` are the extras the tool is installed with. Each is passed to
+    `uv export` as `--extra`, since a default export leaves an extra's
+    dependencies out. `--all-extras` fails on a project that declares two
+    extras as conflicting.
 
     Reads a shallow clone of the one ref and lets `uv export` interpret the lock.
     The lock is also read directly for one thing the export drops: the extras
     a dependent requests of a git dependency, which `_override_extras` restores.
 
-    Raises `LockUnreadableError` when the ref will not clone or uv will not
-    export its lock. A tag with no lock at all is not an error; the caller
-    installs it unlocked and says so.
+    Raises `LockUnreadableError` when git or uv is not on PATH, the ref will not
+    clone, or uv will not export its lock. None is not a failure:
+    `install_release` installs that tag unlocked and sets `lock_missing`.
     """
     git = shutil.which('git')
     uv = shutil.which('uv')
@@ -261,7 +272,7 @@ def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
         missing = 'git' if not git else 'uv'
         raise LockUnreadableError(f'{missing} is not on PATH, so the uv.lock at {ref} cannot be read')
 
-    # A directory left behind in the system temp is not worth failing an update over.
+    # A clone that cannot be deleted stays in the system temp, and the update goes ahead.
     with tempfile.TemporaryDirectory(prefix='pyselfupdate-lock-', ignore_cleanup_errors=True) as scratch:
         checkout = Path(scratch) / 'checkout'
         cloned = _run([git, 'clone', '--quiet', '--depth', '1', '--branch', ref, url, str(checkout)])
@@ -284,14 +295,14 @@ def _override_extras(lock: dict, extras: Sequence[str]) -> dict[str, tuple[str, 
     """The extras requested of each package, walking dependency edges from the project at the lock's root.
 
     An override replaces a requirement whole, extras included, and `uv export`
-    writes `gitdep @ git+...` where the tool declared `gitdep[x] @ git+...`. So
-    without this, an update drops the packages `x` pulled in, and the tool fails
-    on its first import of one after its environment was already replaced. The
-    lock keeps the extras on the edge that requests them:
-    `{ name = "gitdep", extra = ["x"] }`.
+    writes `gitdep @ git+...` where the tool declared `gitdep[x] @ git+...`.
+    Without this, an update leaves out the packages `x` pulls in. The tool then
+    raises ModuleNotFoundError on its first import of one, after its old
+    environment is gone. The lock keeps the extras on the edge that requests
+    them: `{ name = "gitdep", extra = ["x"] }`.
 
-    An optional-dependency group is followed only once something requests it,
-    so an extra nothing installed asks for adds nothing.
+    Only requested extras are followed, so an override never names an extra
+    the installed tool did not ask for.
     """
     packages: dict[str, list[dict]] = {}
     for package in lock.get('package') or []:
@@ -315,7 +326,11 @@ def _override_extras(lock: dict, extras: Sequence[str]) -> dict[str, tuple[str, 
 
 
 def _pins_from_export(exported: str, extras: dict[str, tuple[str, ...]]) -> Pins:
-    """A path requirement is neither kind, and is dropped: it is inside the commit being installed."""
+    """Sorts `uv export` lines: ` @ ` before any marker makes an override, `==` a constraint.
+
+    Anything else is a path requirement and is dropped. Its code is inside the
+    commit being installed.
+    """
     constraints: list[str] = []
     overrides: list[str] = []
     for line in exported.splitlines():
@@ -363,11 +378,11 @@ def _run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedPro
 
 
 def _reason(completed: subprocess.CompletedProcess[str]) -> str:
-    """Everything a failing command printed.
+    """Everything a failing command printed, rather than one line of it.
 
-    No one line carries the reason. uv puts a lock's schema error on its first
-    line, git puts a missing ref on its last, and uv wraps a resolution failure
-    so its last line is half a sentence.
+    uv puts a lock's schema error on its first line, git puts a missing ref on
+    its last, and uv wraps a resolution failure so its last line is half a
+    sentence.
     """
     return (completed.stderr or completed.stdout or '').strip() or f'exit status {completed.returncode}'
 

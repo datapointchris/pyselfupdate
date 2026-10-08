@@ -98,7 +98,7 @@ def test_reads_the_tools_extras_and_rebuilds_what_was_installed_beside_it(make_r
 
 
 def test_a_requirement_no_line_can_reproduce_does_not_fail_the_read(make_receipt) -> None:
-    """The notify gate reads the receipt too, and a failed read silences it; `update` refuses instead."""
+    """A raise here would make the notify gate treat the tool as a local install and print no notice."""
     make_receipt(
         'syncer',
         '{ name = "syncer", git = "https://github.com/x/syncer.git?rev=v4.0.0" }, { name = "plugin", virtual = "/src/plugin" }',

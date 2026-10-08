@@ -37,9 +37,8 @@ class Result:
     release: Release | None = None
     metadata: dict[str, str] = field(default_factory=dict)
 
-    # True when a git install ran unlocked because its tag carries no uv.lock,
-    # so its dependencies resolved to the newest rather than what its CI tested.
-    # An index install has no tag checkout to read a lock from and leaves it False.
+    # True when a git install ran unlocked because its tag carries no uv.lock.
+    # An index install reads no lock, so it leaves this False.
     lock_missing: bool = False
 
     @property
@@ -48,11 +47,14 @@ class Result:
 
     @property
     def lock_warning(self) -> str:
-        """The sentence every caller shows for `lock_missing`, or an empty string."""
+        """A line naming the tag when `lock_missing` is set, else an empty string.
+
+        `run_update` and `update_and_reexec` print it to stderr.
+        """
         if not self.lock_missing:
             return ''
         tag = self.release.install_ref() if self.release else self.latest
-        return f'{tag} has no uv.lock, so its dependencies resolved to the newest rather than what its CI tested'
+        return f'{tag} has no uv.lock, so its dependencies were installed at their newest versions'
 
 
 def check(config: Config) -> Result:
@@ -180,6 +182,7 @@ def _require_updatable(installation: Installation) -> None:
         )
     if installation._unrebuildable:
         raise NotInstalledError(
-            f'{installation.tool} was installed with {", ".join(installation._unrebuildable)} '
-            f'in a form an update cannot pass back to uv, so updating would drop it; reinstall it by hand'
+            f'{installation.tool} was installed with {", ".join(installation._unrebuildable)}, '
+            f'which an update cannot pass back to uv and would drop. '
+            f'Reinstall {installation.tool} by hand with `uv tool install --force`'
         )

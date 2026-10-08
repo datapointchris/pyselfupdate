@@ -121,12 +121,9 @@ def gitdep(tmp_path: Path) -> Path:
 
 
 def test_an_update_installs_the_locks_versions_not_the_newest(tmp_path: Path, offline: Path, gitdep: Path) -> None:
-    """v2.0.0 locks 1.0.0 of a registry package and of a git one, and 2.0.0 of
-    each exists by the time the update runs.
-
-    Both kinds, because they reach uv differently: the registry pin as a
-    constraint, the git pin as an override.
-    """
+    """v2.0.0 locks `pindemo` and `gitdep` at 1.0.0, and both are at 2.0.0 by the
+    time the update runs. `pindemo` reaches uv as a constraint and `gitdep` as an
+    override."""
     wheel(offline, 'pindemo', '1.0.0')
     tool = tmp_path / 'locktool'
     dependencies = ('pindemo>=1', f'gitdep @ git+{gitdep.as_uri()}')
@@ -147,8 +144,7 @@ def test_an_update_installs_the_locks_versions_not_the_newest(tmp_path: Path, of
 
 
 def test_a_git_dependency_keeps_the_extra_its_dependent_declares(tmp_path: Path, offline: Path, gitdep: Path) -> None:
-    """`uv export` writes `gitdep @ git+...` with no extra, and an override replaces
-    the declared `gitdep[x]` whole, so the package `x` pulls in would be dropped."""
+    """Without `_override_extras`, `extrademo` is missing from the tool's environment."""
     wheel(offline, 'extrademo', '1.0.0')
     project(gitdep, 'gitdep', '1.0.0', extras={'x': ('extrademo',)})
     tool = tmp_path / 'locktool'
@@ -163,7 +159,8 @@ def test_a_git_dependency_keeps_the_extra_its_dependent_declares(tmp_path: Path,
 
 
 def test_an_update_keeps_the_tools_extras_and_what_was_installed_beside_it(tmp_path: Path, offline: Path) -> None:
-    """The extra's dependency is held too: a default export leaves it out, so it would resolve to 2.0.0."""
+    """`fastdemo` comes from the `fast` extra, which a default `uv export` leaves
+    out, so without `--extra fast` it installs at 2.0.0."""
     wheel(offline, 'fastdemo', '1.0.0')
     wheel(offline, 'withdemo', '1.0.0')
     editwith = tmp_path / 'editwith'
@@ -196,7 +193,7 @@ def test_a_tag_with_no_lock_reads_as_none(tmp_path: Path, offline: Path) -> None
 
 
 def test_the_lock_is_read_at_the_ref_asked_for(tmp_path: Path, offline: Path) -> None:
-    """The branch head locks a newer version, so reading it instead would show."""
+    """The branch head locks `pindemo` 2.0.0, so reading the head returns `pindemo==2.0.0`."""
     wheel(offline, 'pindemo', '1.0.0')
     tool = tmp_path / 'locktool'
     release(tool, 'locktool', '1.0.0', ('pindemo>=1',))
@@ -217,7 +214,8 @@ def test_a_ref_that_will_not_clone_is_refused(tmp_path: Path, offline: Path) -> 
 
 
 def test_a_lock_uv_will_not_export_is_refused_with_uvs_reason(tmp_path: Path, offline: Path) -> None:
-    """A lock from a newer uv is the likely case, and its remedy is on uv's first line, not its last."""
+    """`version = 999` stands in for a lock from a newer uv. uv names the schema
+    version on the first line of its stderr, ahead of the parse error it wraps."""
     tool = tmp_path / 'locktool'
     project(tool, 'locktool', '1.0.0')
     (tool / 'uv.lock').write_text('version = 999\n')

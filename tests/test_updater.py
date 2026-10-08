@@ -2,8 +2,8 @@
 
 `run_install` and `read_lock` are patched throughout rather than exercised: one
 rebuilds a real virtual environment and the other clones a repository. What is
-asserted instead is the requirement and the pins handed to the install, which
-are the parts that can be wrong. `test_lock.py` runs both for real.
+asserted instead is what reaches the install: the requirement, the pins and the
+`--with` lines. `test_lock.py` runs both for real.
 """
 
 from __future__ import annotations
@@ -166,14 +166,13 @@ def test_a_requirement_an_update_cannot_pass_back_refuses_rather_than_dropping_i
 def test_update_and_reexec_shows_the_lock_warning_before_replacing_the_process(
     pinned, installs, lock: StubLock, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The caller never gets the Result back, so this is the only place the warning can appear."""
     lock.pins = None
     monkeypatch.setattr(update_module, 'reexec', lambda: print('reexec', file=sys.stderr))
 
     update_and_reexec(config(StubSource(tag='v2.0.0')))
 
     assert capsys.readouterr().err.splitlines() == [
-        '! demo: v2.0.0 has no uv.lock, so its dependencies resolved to the newest rather than what its CI tested',
+        '! demo: v2.0.0 has no uv.lock, so its dependencies were installed at their newest versions',
         'reexec',
     ]
 
@@ -189,7 +188,6 @@ def test_a_tag_with_no_lock_installs_unlocked_and_says_so(pinned, installs, held
 
 
 def test_an_index_install_reads_no_lock(make_receipt, installs, held, lock: StubLock) -> None:
-    """A wheel carries no uv.lock, and an index receipt names no repository to clone."""
     make_receipt('demo', '{ name = "demo" }')
 
     result = update(config(StubSource(tag='v2.0.0')))

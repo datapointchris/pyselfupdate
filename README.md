@@ -129,19 +129,20 @@ exit_now()
 every dependency to the newest version, so a tool would run on a set its CI
 never tested. `update` therefore clones the release's tag, exports its
 `uv.lock`, and passes registry pins as `--constraints` and git pins as
-`--overrides`. uv records both in the tool's receipt.
+`--overrides`. uv records both in the tool's receipt, so a later
+`uv tool upgrade` stays held to them.
 
 | The tag | What `update` does |
 | --- | --- |
 | Carries a `uv.lock` | Installs the locked versions |
-| Carries none | Installs unlocked and sets `lock_missing`. `lock_warning` names the tag, and `run_update` prints it |
+| Carries none | Installs unlocked and sets `lock_missing`. `lock_warning` names the tag, and `run_update` and `update_and_reexec` print it |
 | Will not clone, or uv will not export its lock | Raises `LockUnreadableError` and installs nothing |
 
-An install from an index is unchanged, because a wheel carries no lock.
+An install from an index reads no lock, because a wheel carries none.
 
-An update keeps what the tool was installed with. Its own extras, as in
-`mytool[fast]`, are reinstalled and their dependencies held to the lock. Every
-`--with` and `--with-editable` requirement is passed back to uv.
+An update reinstalls the tool's own extras, as in `mytool[fast]`, with their
+dependencies held to the lock. Every `--with` and `--with-editable`
+requirement is passed back to uv as well.
 
 ## What will not be updated
 
@@ -154,7 +155,7 @@ runtime:
 | `name = "mytool"` (from an index) | Updatable |
 | `git = "...git"` with no `rev` | Refused — tracks a branch, so its version says nothing about how far behind it is |
 | `directory` / `path` / `editable` | Refused — reinstalling would discard a working copy |
-| A `--with` requirement in a form an update cannot pass back to uv | Refused with `NotInstalledError` — the update would drop it |
+| A `--with` requirement no requirements-file line reproduces, such as a relative path | Refused with `NotInstalledError` — the update would drop it |
 
 A tool that cannot be identified at all is treated as local and left alone.
 
@@ -206,8 +207,8 @@ It never raises. A command that is not installed, exits non-zero, or takes
 longer than ten seconds degrades to an unauthenticated request, which still
 works against a public repository.
 
-`token_func` is now only for a credential neither the environment nor a command
-can produce. It is called lazily, for the same reason the command is: the notify
+`token_func` is for a credential neither the environment nor a command can
+produce. It is called lazily, for the same reason the command is: the notify
 gate resolves a `Config` on every invocation and declines most of them without
 reaching the network, and a subprocess in front of that gate is the entire cost
 worth avoiding.
