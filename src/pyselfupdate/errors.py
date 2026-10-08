@@ -24,7 +24,11 @@ class LocalInstallError(SelfUpdateError):
 
 
 class NotInstalledError(SelfUpdateError):
-    """The tool is not installed as a uv tool, so there is nothing to update."""
+    """uv's receipt is missing, unreadable, or names no requirement for the tool.
+
+    `update` raises it too when the receipt lists a `--with` requirement that no
+    requirements-file line reproduces, because reinstalling would drop it.
+    """
 
 
 class NoReleaseError(SelfUpdateError):
@@ -37,3 +41,12 @@ class SourceError(SelfUpdateError):
 
 class InstallFailedError(SelfUpdateError):
     """The install command ran and failed."""
+
+
+class LockUnreadableError(SelfUpdateError):
+    """The release's `uv.lock` could not be read, so nothing was installed.
+
+    Raised when git or uv is not on PATH, the tag will not clone, or `uv export`
+    refuses the lock. A tag with no `uv.lock` at all is not this error: it
+    installs unlocked and sets `Result.lock_missing`.
+    """

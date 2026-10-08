@@ -357,8 +357,8 @@ def test_the_environment_beats_the_command(server: Recorder, monkeypatch: pytest
 
 
 def test_a_callers_own_source_beats_the_command(server: Recorder, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`token_func` is now for a credential neither the environment nor a command
-    can produce, so it has to win over the default."""
+    """`token_func` is for a credential neither the environment nor a command can
+    produce, so it has to win over the default."""
     server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': 'v1.0.0'})
     monkeypatch.setenv('GITHUB_TOKEN_COMMAND', printing('from-command'))
 

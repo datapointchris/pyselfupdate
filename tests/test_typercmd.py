@@ -2,21 +2,25 @@
 
 The assertions that matter here are about ordering, not output: every step that
 reaches the network or imports a module must happen before the install, and the
-process must not return into its CLI afterwards. `run_install` and `exit_now`
-are both patched -- one would rebuild a real virtual environment, the other
-would take the test runner down with it.
+process must not return into its CLI afterwards. `run_install`, `read_lock` and
+`exit_now` are all patched -- the first would rebuild a real virtual
+environment, the second would clone a repository, and the last would take the
+test runner down with it.
 """
 
 from __future__ import annotations
 
 import pytest
 import typer
+from conftest import StubLock
 from conftest import StubSource
 
 from pyselfupdate import Config
 from pyselfupdate import typercmd
 from pyselfupdate import updater as update_module
 from pyselfupdate.errors import InstallFailedError
+from pyselfupdate.errors import LockUnreadableError
+from pyselfupdate.install import Pins
 from pyselfupdate.typercmd import run_update
 
 
@@ -37,11 +41,18 @@ def events() -> list[str]:
     return []
 
 
+@pytest.fixture(autouse=True)
+def lock(monkeypatch: pytest.MonkeyPatch) -> StubLock:
+    stub = StubLock()
+    monkeypatch.setattr(update_module, 'read_lock', stub)
+    return stub
+
+
 @pytest.fixture
 def installs(monkeypatch: pytest.MonkeyPatch, events: list[str]) -> list[str]:
     recorded: list[str] = []
 
-    def record(requirement: str, quiet: bool = True) -> None:
+    def record(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
         events.append('install')
         recorded.append(requirement)
 
@@ -128,7 +139,7 @@ def test_a_local_install_is_refused_before_any_request(make_receipt, installs, e
 
 
 def test_an_install_failure_exits_non_zero(pinned, exits, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
-    def explode(requirement: str, quiet: bool = True) -> None:
+    def explode(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
         raise InstallFailedError('uv tool install failed: no such ref')
 
     monkeypatch.setattr(update_module, 'run_install', explode)
@@ -139,3 +150,32 @@ def test_an_install_failure_exits_non_zero(pinned, exits, capsys, monkeypatch: p
     assert raised.value.exit_code == 1
     assert not exits
     assert 'demo update failed: uv tool install failed: no such ref' in capsys.readouterr().err
+
+
+def test_a_tag_with_no_lock_is_named_on_stderr(pinned, installs, exits, capsys, lock: StubLock) -> None:
+    lock.pins = None
+
+    run_update(config(RecordingSource([])))
+
+    captured = capsys.readouterr()
+    assert 'demo updated: v1.0.0 → v2.0.0' in captured.out
+    assert '! demo: v2.0.0 has no uv.lock' in captured.err
+    assert exits == [0]
+
+
+def test_a_locked_update_prints_no_warning(pinned, installs, exits, capsys) -> None:
+    run_update(config(RecordingSource([])))
+
+    assert 'uv.lock' not in capsys.readouterr().err
+
+
+def test_an_unreadable_lock_exits_non_zero_having_installed_nothing(pinned, installs, exits, capsys, lock: StubLock) -> None:
+    lock.error = LockUnreadableError('could not clone https://github.com/x/demo.git at v2.0.0 to read its uv.lock: not found')
+
+    with pytest.raises(typer.Exit) as raised:
+        run_update(config(RecordingSource([])))
+
+    assert raised.value.exit_code == 1
+    assert not installs
+    assert not exits
+    assert 'demo update failed: could not clone' in capsys.readouterr().err

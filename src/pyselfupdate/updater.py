@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -9,9 +10,11 @@ from pyselfupdate import version as semver
 from pyselfupdate.config import Config
 from pyselfupdate.errors import LocalInstallError
 from pyselfupdate.errors import NoReleaseError
+from pyselfupdate.errors import NotInstalledError
 from pyselfupdate.install import Installation
 from pyselfupdate.install import InstallKind
 from pyselfupdate.install import read_installation
+from pyselfupdate.install import read_lock
 from pyselfupdate.install import reexec
 from pyselfupdate.install import requirement_for
 from pyselfupdate.install import run_install
@@ -34,9 +37,24 @@ class Result:
     release: Release | None = None
     metadata: dict[str, str] = field(default_factory=dict)
 
+    # True when a git install ran unlocked because its tag carries no uv.lock.
+    # An index install reads no lock, so it leaves this False.
+    lock_missing: bool = False
+
     @property
     def update_available(self) -> bool:
         return self.current != self.latest
+
+    @property
+    def lock_warning(self) -> str:
+        """A line naming the tag when `lock_missing` is set, else an empty string.
+
+        `run_update` and `update_and_reexec` print it to stderr.
+        """
+        if not self.lock_missing:
+            return ''
+        tag = self.release.install_ref() if self.release else self.latest
+        return f'{tag} has no uv.lock, so its dependencies were installed at their newest versions'
 
 
 def check(config: Config) -> Result:
@@ -75,18 +93,24 @@ def install_release(config: Config, result: Result, installation: Installation, 
     success this interpreter's environment has been rewritten underneath it, so
     the caller may not import anything afterwards -- see
     `pyselfupdate.install.reexec` and `pyselfupdate.install.exit_now`.
+
+    A git install is held to the `uv.lock` at the release's tag. A tag without
+    one installs unlocked and comes back with `lock_missing` set. A lock that
+    cannot be read raises `LockUnreadableError` before anything is installed.
     """
     if not result.update_available or result.release is None:
         return result
 
-    requirement = requirement_for(installation, result.release.install_ref())
-    run_install(requirement, quiet=quiet)
+    ref = result.release.install_ref()
+    pins = read_lock(installation.url, ref, extras=installation.extras) if installation.kind is InstallKind.GIT else None
+    run_install(requirement_for(installation, ref), quiet=quiet, pins=pins, with_requirements=installation.with_requirements)
 
     return Result(
         current=result.current,
         latest=result.latest,
         applied=True,
         release=result.release,
+        lock_missing=installation.kind is InstallKind.GIT and pins is None,
     )
 
 
@@ -108,10 +132,13 @@ def update_and_reexec(config: Config, *, quiet: bool = True) -> Result:
     """`update`, then replace this process when anything was installed.
 
     Returns normally only when nothing was installed; otherwise it does not
-    return at all.
+    return at all. The caller never sees the `Result` of an install, so this
+    writes its `lock_warning` to stderr before the re-exec.
     """
     result = update(config, quiet=quiet)
     if result.applied:
+        if result.lock_warning:
+            print(f'! {config.tool}: {result.lock_warning}', file=sys.stderr)
         reexec()
     return result
 
@@ -152,4 +179,10 @@ def _require_updatable(installation: Installation) -> None:
             f'{installation.tool} is installed from a branch rather than a tag, '
             f'so a release version cannot be compared against it; '
             f'reinstall from a tagged release to enable updates'
+        )
+    if installation._unrebuildable:
+        raise NotInstalledError(
+            f'{installation.tool} was installed with {", ".join(installation._unrebuildable)}, '
+            f'which an update cannot pass back to uv and would drop. '
+            f'Reinstall {installation.tool} by hand with `uv tool install --force`'
         )

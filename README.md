@@ -32,9 +32,9 @@ version exists, so it silently drifts. The usual fix drags an HTTP client, a
 TOML parser and a version library into a tool that had none of them.
 
 This package has zero runtime dependencies — `urllib` for the network,
-`tomllib` for uv's receipt, and its own semver implementation — and CI enforces
-that by importing every module into a virtual environment containing nothing
-else.
+`tomllib` for uv's receipt and lock, and its own semver implementation — and
+CI enforces that by importing every module into a virtual environment
+containing nothing else.
 
 ## notify
 
@@ -104,7 +104,8 @@ environment the running interpreter lives in**. Unlike replacing a Unix binary
 from under a live process, so anything imported afterwards may fail in ways
 that are hard to read. Make it the last thing your process does, then call
 `exit_now` — or use `update_and_reexec` to replace the process with the new
-version immediately.
+version immediately. Its caller never sees the `Result`, so it writes
+`lock_warning` to stderr itself before the re-exec.
 
 That cuts both ways: anything you want to *print* after the install has to be
 fetched before it. `run_update` resolves its changelog first for exactly this
@@ -115,10 +116,33 @@ pieces `update` is made of rather than working around it:
 installation = require_updatable(config)  # refuses a checkout, costs nothing
 result = check(config)  # network, environment still intact
 notes = changelog(config, result.current, result.latest)
-install_release(config, result, installation)
+installed = install_release(config, result, installation)
 print(notes)
+if installed.lock_warning:
+    print(installed.lock_warning, file=sys.stderr)
 exit_now()
 ```
+
+### A git install is held to the release's `uv.lock`
+
+`uv tool install` never reads a lock. Handed a git requirement, it resolves
+every dependency to the newest version, so a tool would run on a set its CI
+never tested. `update` therefore clones the release's tag, exports its
+`uv.lock`, and passes registry pins as `--constraints` and git pins as
+`--overrides`. uv records both in the tool's receipt, so a later
+`uv tool upgrade` stays held to them.
+
+| The tag | What `update` does |
+| --- | --- |
+| Carries a `uv.lock` | Installs the locked versions |
+| Carries none | Installs unlocked and sets `lock_missing`. `lock_warning` names the tag, and `run_update` and `update_and_reexec` print it |
+| Will not clone, or uv will not export its lock | Raises `LockUnreadableError` and installs nothing |
+
+An install from an index reads no lock, because a wheel carries none.
+
+An update reinstalls the tool's own extras, as in `mytool[fast]`, with their
+dependencies held to the lock. Every `--with` and `--with-editable`
+requirement is passed back to uv as well.
 
 ## What will not be updated
 
@@ -131,6 +155,7 @@ runtime:
 | `name = "mytool"` (from an index) | Updatable |
 | `git = "...git"` with no `rev` | Refused — tracks a branch, so its version says nothing about how far behind it is |
 | `directory` / `path` / `editable` | Refused — reinstalling would discard a working copy |
+| A `--with` requirement no requirements-file line reproduces, such as a relative path | Refused with `NotInstalledError` — the update would drop it |
 
 A tool that cannot be identified at all is treated as local and left alone.
 
@@ -182,8 +207,8 @@ It never raises. A command that is not installed, exits non-zero, or takes
 longer than ten seconds degrades to an unauthenticated request, which still
 works against a public repository.
 
-`token_func` is now only for a credential neither the environment nor a command
-can produce. It is called lazily, for the same reason the command is: the notify
+`token_func` is for a credential neither the environment nor a command can
+produce. It is called lazily, for the same reason the command is: the notify
 gate resolves a `Config` on every invocation and declines most of them without
 reaching the network, and a subprocess in front of that gate is the entire cost
 worth avoiding.
