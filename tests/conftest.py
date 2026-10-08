@@ -17,6 +17,7 @@ import pytest
 
 from pyselfupdate import state
 from pyselfupdate.errors import NoReleaseError
+from pyselfupdate.install import Pins
 from pyselfupdate.source import Release
 
 # Every variable that can change what the gate decides. Cleared before each test
@@ -55,6 +56,24 @@ class StubSource:
 
     def changelog(self, from_ref: str, to_ref: str) -> list[str]:
         return self.subjects.copy()
+
+
+@dataclass
+class StubLock:
+    """Stands in for `read_lock`, which clones the release's repository.
+
+    `test_lock.py` drives the real one against real git and real uv.
+    """
+
+    pins: Pins | None = field(default_factory=lambda: Pins(constraints=('click==8.1.7',)))
+    error: Exception | None = None
+    reads: list[tuple[str, str]] = field(default_factory=list)
+
+    def __call__(self, url: str, ref: str) -> Pins | None:
+        self.reads.append((url, ref))
+        if self.error is not None:
+            raise self.error
+        return self.pins
 
 
 @pytest.fixture(autouse=True)

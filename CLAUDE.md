@@ -24,7 +24,7 @@ from goselfupdate".
 | `version.py` | Semantic version comparison, replacing `packaging` |
 | `source.py` | The `Source` protocol and `Release` |
 | `github.py` | `GitHubSource`, over `urllib` |
-| `install.py` | Reading uv's receipt, running `uv tool install`, re-exec |
+| `install.py` | Reading uv's receipt, reading a tag's `uv.lock`, running `uv tool install`, re-exec |
 | `updater.py` | `check`, `update`, `changelog` |
 | `notifier.py` | The gate, the interval, the notice |
 | `state.py` | The shared `autoupdate-<machine>.json` schema, and the machine derivation that names it |
@@ -52,8 +52,8 @@ to the function and fail on attribute access. Do not rename them back.
 
   What it would buy does not reach here. This package makes one request, to
   `api.github.com`, for JSON. It downloads no assets: `install.run_install`
-  shells out to `uv tool install --force`, so there is no CDN redirect for a
-  token to leak into, and nothing needs a client object, connection reuse or
+  shells out to `uv tool install --force` and `install.read_lock` to
+  `git clone`, so there is no CDN redirect for a token to leak into, and nothing needs a client object, connection reuse or
   streaming. Revisit if a second HTTP need appears — at that point the closure
   is buying something.
 - **typer stays confined to `typercmd.py`,** installed via the `typer` extra.
@@ -119,6 +119,12 @@ The two-layer shape — `StubSource` in `conftest.py` for the logic, `test_githu
 against a local `http.server` for the wire — is `standards/testing.md` § "A network
 client tests offline against a stub, plus one test against a local server".
 Everything runs offline.
+
+The install has the same two layers. `StubLock` stands in for `read_lock` in the
+updater and typercmd tests. `test_lock.py` runs real git and real uv against
+repositories and a wheel directory it builds under tmp, with uv offline and
+every tool directory redirected there. It is the only test that proves what the
+pins do.
 
 **Terminal detection is injected, never faked by reassigning `sys.stdout`** —
 `standards/python.md` § "Inject terminal detection; never monkeypatch it" carries

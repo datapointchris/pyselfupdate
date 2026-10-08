@@ -21,6 +21,7 @@ from pyselfupdate.config import Config
 from pyselfupdate.errors import InstallFailedError
 from pyselfupdate.errors import InvalidConfigError
 from pyselfupdate.errors import LocalInstallError
+from pyselfupdate.errors import LockUnreadableError
 from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.errors import NotInstalledError
 from pyselfupdate.errors import SelfUpdateError
@@ -54,6 +55,7 @@ __all__ = [
     'Installation',
     'InvalidConfigError',
     'LocalInstallError',
+    'LockUnreadableError',
     'NoReleaseError',
     'NotInstalledError',
     'Outcome',

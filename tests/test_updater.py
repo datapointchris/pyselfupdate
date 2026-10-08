@@ -1,13 +1,15 @@
 """check() and update().
 
-`run_install` is patched throughout rather than exercised: it shells out to uv,
-which would rebuild a real virtual environment. What is asserted instead is the
-requirement string handed to it, which is the part that can be wrong.
+`run_install` and `read_lock` are patched throughout rather than exercised: one
+rebuilds a real virtual environment and the other clones a repository. What is
+asserted instead is the requirement and the pins handed to the install, which
+are the parts that can be wrong. `test_lock.py` runs both for real.
 """
 
 from __future__ import annotations
 
 import pytest
+from conftest import StubLock
 from conftest import StubSource
 
 from pyselfupdate import Config
@@ -15,17 +17,37 @@ from pyselfupdate import updater as update_module
 from pyselfupdate.errors import InstallFailedError
 from pyselfupdate.errors import InvalidConfigError
 from pyselfupdate.errors import LocalInstallError
+from pyselfupdate.errors import LockUnreadableError
 from pyselfupdate.errors import NoReleaseError
+from pyselfupdate.install import Pins
 from pyselfupdate.updater import changelog
 from pyselfupdate.updater import check
 from pyselfupdate.updater import update
 
 
+@pytest.fixture(autouse=True)
+def lock(monkeypatch: pytest.MonkeyPatch) -> StubLock:
+    stub = StubLock()
+    monkeypatch.setattr(update_module, 'read_lock', stub)
+    return stub
+
+
 @pytest.fixture
-def installs(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+def held() -> list[Pins | None]:
+    """The pins each install was handed, in the order `installs` records them."""
+    return []
+
+
+@pytest.fixture
+def installs(monkeypatch: pytest.MonkeyPatch, held: list[Pins | None]) -> list[str]:
     """Records the requirements that would have been installed."""
     recorded: list[str] = []
-    monkeypatch.setattr(update_module, 'run_install', lambda requirement, quiet=True: recorded.append(requirement))
+
+    def record(requirement: str, quiet: bool = True, pins: Pins | None = None) -> None:
+        recorded.append(requirement)
+        held.append(pins)
+
+    monkeypatch.setattr(update_module, 'run_install', record)
     return recorded
 
 
@@ -94,13 +116,52 @@ def test_update_installs_the_pinned_tag(pinned, installs: list[str]) -> None:
     assert installs == ['demo @ git+https://github.com/x/demo.git@v2.0.0']
 
 
-def test_update_preserves_a_prefixed_tag(make_receipt, installs: list[str]) -> None:
+def test_update_preserves_a_prefixed_tag(make_receipt, installs: list[str], lock: StubLock) -> None:
     make_receipt('icb', '{ name = "icb", git = "https://github.com/x/ichrisbirch.git?rev=cli/v0.3.0" }')
     source = StubSource(tag='v0.3.3', ref='cli/v0.3.3')
 
     update(Config(tool='icb', owner='x', version='0.3.0', source=source))
 
     assert installs == ['icb @ git+https://github.com/x/ichrisbirch.git@cli/v0.3.3']
+    assert lock.reads == [('https://github.com/x/ichrisbirch.git', 'cli/v0.3.3')]
+
+
+def test_a_git_update_is_held_to_the_lock_at_the_release_tag(pinned, installs, held, lock: StubLock) -> None:
+    result = update(config(StubSource(tag='v2.0.0')))
+
+    assert lock.reads == [('https://github.com/x/demo.git', 'v2.0.0')]
+    assert held == [lock.pins]
+    assert not result.lock_missing
+
+
+def test_a_tag_with_no_lock_installs_unlocked_and_says_so(pinned, installs, held, lock: StubLock) -> None:
+    lock.pins = None
+
+    result = update(config(StubSource(tag='v2.0.0')))
+
+    assert result.applied
+    assert held == [None]
+    assert result.lock_missing
+
+
+def test_an_index_install_reads_no_lock(make_receipt, installs, held, lock: StubLock) -> None:
+    """A wheel carries no uv.lock, and an index receipt names no repository to clone."""
+    make_receipt('demo', '{ name = "demo" }')
+
+    result = update(config(StubSource(tag='v2.0.0')))
+
+    assert installs == ['demo==2.0.0']
+    assert lock.reads == []
+    assert held == [None]
+    assert not result.lock_missing
+
+
+def test_an_unreadable_lock_installs_nothing(pinned, installs: list[str], lock: StubLock) -> None:
+    lock.error = LockUnreadableError('uv export would not read the uv.lock at v2.0.0: unsupported lock version')
+
+    with pytest.raises(LockUnreadableError, match='unsupported lock version'):
+        update(config(StubSource(tag='v2.0.0')))
+    assert not installs
 
 
 def test_update_is_a_no_op_when_current(pinned, installs: list[str]) -> None:
@@ -138,7 +199,7 @@ def test_update_refuses_before_checking_the_source(make_receipt) -> None:
 
 
 def test_an_install_failure_propagates(pinned, monkeypatch: pytest.MonkeyPatch) -> None:
-    def explode(requirement: str, quiet: bool = True) -> None:
+    def explode(requirement: str, quiet: bool = True, pins: Pins | None = None) -> None:
         raise InstallFailedError('uv tool install failed: no such ref')
 
     monkeypatch.setattr(update_module, 'run_install', explode)

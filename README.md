@@ -120,6 +120,22 @@ print(notes)
 exit_now()
 ```
 
+### A git install is held to the release's `uv.lock`
+
+`uv tool install` never reads a lock. Handed a git requirement, it resolves
+every dependency to the newest version, so a tool would run on a set its CI
+never tested. `update` therefore clones the release's tag, exports its
+`uv.lock`, and passes registry pins as `--constraints` and git pins as
+`--overrides`. uv records both in the tool's receipt.
+
+| The tag | What `update` does |
+| --- | --- |
+| Carries a `uv.lock` | Installs the locked versions |
+| Carries none | Installs unlocked and returns `lock_missing=True`. `run_update` prints a warning naming the tag |
+| Will not clone, or uv will not export its lock | Raises `LockUnreadableError` and installs nothing |
+
+An install from an index is unchanged, because a wheel carries no lock.
+
 ## What will not be updated
 
 Read from uv's own receipt, written at install time, rather than guessed at

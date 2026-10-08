@@ -12,6 +12,7 @@ from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.install import Installation
 from pyselfupdate.install import InstallKind
 from pyselfupdate.install import read_installation
+from pyselfupdate.install import read_lock
 from pyselfupdate.install import reexec
 from pyselfupdate.install import requirement_for
 from pyselfupdate.install import run_install
@@ -33,6 +34,11 @@ class Result:
     applied: bool = False
     release: Release | None = None
     metadata: dict[str, str] = field(default_factory=dict)
+
+    # True when a git install ran unlocked because its tag carries no uv.lock,
+    # so its dependencies resolved to the newest rather than what its CI tested.
+    # An index install has no tag checkout to read a lock from and leaves it False.
+    lock_missing: bool = False
 
     @property
     def update_available(self) -> bool:
@@ -75,18 +81,24 @@ def install_release(config: Config, result: Result, installation: Installation, 
     success this interpreter's environment has been rewritten underneath it, so
     the caller may not import anything afterwards -- see
     `pyselfupdate.install.reexec` and `pyselfupdate.install.exit_now`.
+
+    A git install is held to the `uv.lock` at the release's tag. A tag without
+    one installs unlocked and comes back with `lock_missing` set. A lock that
+    cannot be read raises `LockUnreadableError` before anything is installed.
     """
     if not result.update_available or result.release is None:
         return result
 
-    requirement = requirement_for(installation, result.release.install_ref())
-    run_install(requirement, quiet=quiet)
+    ref = result.release.install_ref()
+    pins = read_lock(installation.url, ref) if installation.kind is InstallKind.GIT else None
+    run_install(requirement_for(installation, ref), quiet=quiet, pins=pins)
 
     return Result(
         current=result.current,
         latest=result.latest,
         applied=True,
         release=result.release,
+        lock_missing=installation.kind is InstallKind.GIT and pins is None,
     )
 
 

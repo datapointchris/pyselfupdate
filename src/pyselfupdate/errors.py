@@ -37,3 +37,11 @@ class SourceError(SelfUpdateError):
 
 class InstallFailedError(SelfUpdateError):
     """The install command ran and failed."""
+
+
+class LockUnreadableError(SelfUpdateError):
+    """The release's tag would not clone, or `uv export` refused its `uv.lock`.
+
+    Nothing was installed. Installing anyway would put the tool on dependencies
+    its CI never ran, which is what holding an update to the lock prevents.
+    """
