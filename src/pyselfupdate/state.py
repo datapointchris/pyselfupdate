@@ -12,13 +12,12 @@ is where `gh` puts the same thing.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import socket
 from dataclasses import asdict
 from dataclasses import dataclass
-from datetime import UTC
-from datetime import datetime
 from pathlib import Path
 
 SCHEMA = 1
@@ -134,9 +133,9 @@ def write(state: State) -> None:
         return
 
 
-def stamp(state: State, moment: datetime | None = None) -> State:
+def stamp(state: State, moment: dt.datetime | None = None) -> State:
     """Set both timestamp fields to the same instant."""
-    now = moment or datetime.now(UTC)
+    now = moment or dt.datetime.now(dt.UTC)
     state.checked_at = now.strftime('%Y-%m-%dT%H:%M:%SZ')
     state.checked_at_epoch = int(now.timestamp())
     return state

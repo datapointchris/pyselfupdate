@@ -12,6 +12,7 @@ httpx2.
 
 from __future__ import annotations
 
+import datetime as dt
 import http.client
 import json
 import os
@@ -24,8 +25,6 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
-from datetime import UTC
-from datetime import datetime
 from typing import IO
 
 from pyselfupdate.errors import NoReleaseError
@@ -349,7 +348,7 @@ def _reset_clock(error: urllib.error.HTTPError) -> str:
     """
     header = error.headers.get('x-ratelimit-reset') if error.headers else None
     try:
-        moment = datetime.fromtimestamp(int(header or ''), tz=UTC)
+        moment = dt.datetime.fromtimestamp(int(header or ''), tz=dt.UTC)
     except (TypeError, ValueError, OSError, OverflowError):
         return ''
     return f'; resets at {moment:%H:%M} UTC'

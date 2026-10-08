@@ -7,9 +7,9 @@ consulted. A skip that still hits the network is a skip that failed.
 
 from __future__ import annotations
 
+import datetime as dt
 import sys
 import time
-from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -27,7 +27,7 @@ from pyselfupdate.notifier import enabled
 
 # An interval of zero: the next call is always due. Named because a bare
 # timedelta() at a call site reads as an oversight rather than the point.
-IMMEDIATELY = timedelta()
+IMMEDIATELY = dt.timedelta()
 
 
 @pytest.fixture

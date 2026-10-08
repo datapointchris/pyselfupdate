@@ -9,12 +9,12 @@ update failure on every invocation.
 from __future__ import annotations
 
 import atexit
+import datetime as dt
 import os
 import sys
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import timedelta
 from enum import Enum
 from typing import Any
 from typing import TextIO
@@ -26,7 +26,7 @@ from pyselfupdate.install import InstallKind
 from pyselfupdate.install import read_installation
 from pyselfupdate.updater import check
 
-DEFAULT_INTERVAL = timedelta(hours=24)
+DEFAULT_INTERVAL = dt.timedelta(hours=24)
 
 # Environment variables. Presence-only, any value including empty -- the
 # NO_COLOR convention -- so that NO_AUTO_UPDATE=0 cannot mean "on". The interval
@@ -66,7 +66,7 @@ class Outcome:
 def notify(
     config: Config,
     *,
-    interval: timedelta | None = None,
+    interval: dt.timedelta | None = None,
     out: TextIO | None = None,
     defer: bool = True,
     interactive: bool | None = None,
@@ -141,7 +141,7 @@ def _asking_for_help() -> bool:
 def _notify(
     config: Config,
     *,
-    interval: timedelta | None,
+    interval: dt.timedelta | None,
     out: TextIO | None,
     defer: bool,
     interactive: bool | None,
@@ -248,7 +248,7 @@ def _is_local_install(tool: str) -> bool:
     return installation.kind is InstallKind.GIT and not installation.revision
 
 
-def _interval(tool: str, override: timedelta | None) -> timedelta:
+def _interval(tool: str, override: dt.timedelta | None) -> dt.timedelta:
     if override is not None:
         return override
     for name in (_tool_variable(tool, 'AUTO_UPDATE_INTERVAL'), FLEET_INTERVAL):
@@ -260,7 +260,7 @@ def _interval(tool: str, override: timedelta | None) -> timedelta:
     return DEFAULT_INTERVAL
 
 
-def _parse_interval(raw: str) -> timedelta | None:
+def _parse_interval(raw: str) -> dt.timedelta | None:
     """Parse `30m`, `24h`, `7d`, or a bare number of seconds."""
     raw = raw.strip().lower()
     if not raw:
@@ -274,10 +274,10 @@ def _parse_interval(raw: str) -> timedelta | None:
         return None
     if value < 0:
         return None
-    return timedelta(seconds=value * (multiplier or 1))
+    return dt.timedelta(seconds=value * (multiplier or 1))
 
 
-def _is_due(stored: state_module.State, window: timedelta) -> bool:
+def _is_due(stored: state_module.State, window: dt.timedelta) -> bool:
     if not stored.checked_at_epoch:
         return True
     return time.time() - stored.checked_at_epoch >= window.total_seconds()
