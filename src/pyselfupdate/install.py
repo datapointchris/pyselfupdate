@@ -9,9 +9,8 @@ a process does before it exits or re-execs.
 resolves every dependency afresh, so the tool would run on whatever was newest
 that day while its CI tested the lock. A git install is therefore held to the
 `uv.lock` at the tag being installed: `read_lock` exports it, and `run_install`
-hands the result to uv. uv records both lists in the receipt, which is how
-anything reading the receipt afterwards tells a locked install from one that
-is not.
+hands the result to uv. uv records both lists in the receipt, so
+`uv tool upgrade` keeps the install held to them.
 """
 
 from __future__ import annotations
@@ -22,7 +21,9 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass
+from dataclasses import field
 from enum import Enum
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as installed_version
@@ -67,6 +68,17 @@ class Installation:
     # installed from a moving target, so "up to date" has no meaning.
     revision: str = ''
 
+    extras: tuple[str, ...] = ()
+
+    # The receipt's other requirements, from `--with` and `--with-editable`, as
+    # requirements-file lines, because a `-e` line is the only way to pass an
+    # editable back.
+    with_requirements: tuple[str, ...] = ()
+
+    # Requirements no line can reproduce. Reading one must not fail, or the
+    # notify gate would go silent; `update` refuses instead of dropping it.
+    _unrebuildable: tuple[str, ...] = field(default=(), repr=False)
+
     def is_updatable(self) -> bool:
         return self.kind is not InstallKind.LOCAL
 
@@ -103,37 +115,85 @@ def read_installation(tool: str) -> Installation:
         raise NotInstalledError(f'cannot read {receipt}: {error}') from error
 
     requirements = (payload.get('tool') or {}).get('requirements') or []
+    own = next((requirement for requirement in requirements if requirement.get('name') == tool), None)
+    if own is None:
+        raise NotInstalledError(f'{receipt} lists no requirement named {tool}')
+
+    rebuilt: list[str] = []
+    unrebuildable: list[str] = []
     for requirement in requirements:
-        if requirement.get('name') != tool:
+        if requirement is own:
             continue
+        line = _requirement_line(requirement)
+        if line is None:
+            unrebuildable.append(str(requirement.get('name') or requirement))
+        else:
+            rebuilt.append(line)
 
-        # A local checkout, however uv spelled it. Reinstalling one would
-        # discard the working copy the user is developing against.
-        for key in ('directory', 'path', 'editable'):
-            if requirement.get(key):
-                return Installation(tool, InstallKind.LOCAL, url=str(requirement[key]))
+    def installed_as(kind: InstallKind, url: str = '', revision: str = '') -> Installation:
+        extras = tuple(own.get('extras') or ())
+        return Installation(tool, kind, url, revision, extras, tuple(rebuilt), tuple(unrebuildable))
 
-        git = requirement.get('git')
-        if git:
-            url, _, query = str(git).partition('?')
-            return Installation(tool, InstallKind.GIT, url=url, revision=_revision(query))
+    # A local checkout, however uv spelled it. Reinstalling one would
+    # discard the working copy the user is developing against.
+    for key in ('directory', 'path', 'editable'):
+        if own.get(key):
+            return installed_as(InstallKind.LOCAL, url=str(own[key]))
 
-        return Installation(tool, InstallKind.INDEX)
+    git = own.get('git')
+    if git:
+        url, query, _ = _split_git(str(git))
+        return installed_as(InstallKind.GIT, url=url, revision=query.get('rev', ''))
 
-    raise NotInstalledError(f'{receipt} lists no requirement named {tool}')
+    return installed_as(InstallKind.INDEX)
 
 
-def _revision(query: str) -> str:
-    """The `rev=` from a git requirement's query string.
+def _split_git(git: str) -> tuple[str, dict[str, str], str]:
+    """A receipt's git source as its URL, its query and the commit after `#`.
 
     uv writes `...git?rev=v1.2.3` for a pinned install and omits the query
     entirely for one that follows the default branch.
     """
-    for part in query.split('&'):
-        key, _, value = part.partition('=')
-        if key == 'rev' and value:
-            return value
-    return ''
+    rest, _, commit = git.partition('#')
+    url, _, query = rest.partition('?')
+    pairs = (part.partition('=') for part in query.split('&') if part)
+    return url, {key: value for key, _, value in pairs if value}, commit
+
+
+_LINE_KEYS = frozenset({'name', 'extras', 'marker', 'specifier', 'git', 'subdirectory', 'url', 'path', 'directory', 'editable'})
+
+
+def _requirement_line(requirement: dict) -> str | None:
+    """A receipt requirement as a requirements-file line, or None for a shape outside `_LINE_KEYS`."""
+    name = requirement.get('name')
+    if not name or set(requirement) - _LINE_KEYS:
+        return None
+    extras = requirement.get('extras') or ()
+    named = f'{name}[{",".join(extras)}]' if extras else name
+    marker = f' ; {requirement["marker"]}' if requirement.get('marker') else ''
+
+    if requirement.get('editable'):
+        uri = _file_uri(requirement['editable'])
+        return f'-e {uri}' if uri and not extras and not marker else None
+    if requirement.get('git'):
+        url, query, commit = _split_git(str(requirement['git']))
+        ref = query.get('rev') or query.get('tag') or query.get('branch') or commit
+        subdirectory = query.get('subdirectory') or requirement.get('subdirectory')
+        return f'{named} @ git+{url}{f"@{ref}" if ref else ""}{f"#subdirectory={subdirectory}" if subdirectory else ""}{marker}'
+    if requirement.get('url'):
+        subdirectory = requirement.get('subdirectory')
+        return f'{named} @ {requirement["url"]}{f"#subdirectory={subdirectory}" if subdirectory else ""}{marker}'
+    for key in ('directory', 'path'):
+        if requirement.get(key):
+            uri = _file_uri(requirement[key])
+            return f'{named} @ {uri}{marker}' if uri else None
+    return f'{named}{requirement.get("specifier") or ""}{marker}'
+
+
+def _file_uri(path: str) -> str:
+    """A `file://` URI for an absolute path, or an empty string for a relative one, which has no fixed meaning."""
+    candidate = Path(path)
+    return candidate.as_uri() if candidate.is_absolute() else ''
 
 
 def current_version(package: str) -> str:
@@ -145,10 +205,11 @@ def current_version(package: str) -> str:
 
 
 def requirement_for(installation: Installation, ref: str) -> str:
-    """The requirement string that installs `ref` of an already-installed tool."""
+    """The requirement string that installs `ref` of an already-installed tool, with the extras it has."""
+    named = f'{installation.tool}[{",".join(installation.extras)}]' if installation.extras else installation.tool
     if installation.kind is InstallKind.GIT:
-        return f'{installation.tool} @ git+{installation.url}@{ref}'
-    return f'{installation.tool}=={ref.removeprefix("v")}'
+        return f'{named} @ git+{installation.url}@{ref}'
+    return f'{named}=={ref.removeprefix("v")}'
 
 
 @dataclass(frozen=True)
@@ -179,11 +240,16 @@ class Pins:
         return flags
 
 
-def read_lock(url: str, ref: str) -> Pins | None:
+def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
     """What the `uv.lock` at `ref` of a git repository pins, or None when it has none.
 
-    Reads a shallow clone of the one ref, then lets `uv export` interpret the
-    lock rather than parsing a format uv owns.
+    `extras` are the tool's own, as it is installed. Their dependencies are
+    pinned only when named, because a default export leaves them out, and
+    `--all-extras` is refused by a project declaring two extras as conflicting.
+
+    Reads a shallow clone of the one ref and lets `uv export` interpret the lock.
+    The lock is also read directly for one thing the export drops: the extras
+    a dependent requests of a git dependency, which `_override_extras` restores.
 
     Raises `LockUnreadableError` when the ref will not clone or uv will not
     export its lock. A tag with no lock at all is not an error; the caller
@@ -201,15 +267,54 @@ def read_lock(url: str, ref: str) -> Pins | None:
         cloned = _run([git, 'clone', '--quiet', '--depth', '1', '--branch', ref, url, str(checkout)])
         if cloned.returncode != 0:
             raise LockUnreadableError(f'could not clone {url} at {ref} to read its uv.lock: {_reason(cloned)}')
-        if not (checkout / LOCK_NAME).is_file():
+        lock = checkout / LOCK_NAME
+        if not lock.is_file():
             return None
-        exported = _run([uv, *EXPORT], cwd=checkout)
+        exported = _run([uv, *EXPORT, *(flag for extra in extras for flag in ('--extra', extra))], cwd=checkout)
         if exported.returncode != 0:
             raise LockUnreadableError(f'uv export would not read the uv.lock at {ref}: {_reason(exported)}')
-    return _pins_from_export(exported.stdout)
+        try:
+            requested = _override_extras(tomllib.loads(lock.read_text(encoding='utf-8')), extras)
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            raise LockUnreadableError(f'cannot read the uv.lock at {ref}: {error}') from error
+    return _pins_from_export(exported.stdout, requested)
 
 
-def _pins_from_export(exported: str) -> Pins:
+def _override_extras(lock: dict, extras: Sequence[str]) -> dict[str, tuple[str, ...]]:
+    """The extras requested of each package, walking dependency edges from the project at the lock's root.
+
+    An override replaces a requirement whole, extras included, and `uv export`
+    writes `gitdep @ git+...` where the tool declared `gitdep[x] @ git+...`. So
+    without this, an update drops the packages `x` pulled in, and the tool fails
+    on its first import of one after its environment was already replaced. The
+    lock keeps the extras on the edge that requests them:
+    `{ name = "gitdep", extra = ["x"] }`.
+
+    An optional-dependency group is followed only once something requests it,
+    so an extra nothing installed asks for adds nothing.
+    """
+    packages: dict[str, list[dict]] = {}
+    for package in lock.get('package') or []:
+        packages.setdefault(package.get('name', ''), []).append(package)
+    project = ({'editable': '.'}, {'virtual': '.'})
+    roots = [name for name, entries in packages.items() for package in entries if package.get('source') in project]
+
+    active: dict[str, set[str]] = {root: set(extras) for root in roots}
+    pending = list(roots)
+    while pending:
+        name = pending.pop()
+        for package in packages.get(name, ()):
+            groups = package.get('optional-dependencies') or {}
+            edges = [*(package.get('dependencies') or ()), *(edge for extra in sorted(active[name]) for edge in groups.get(extra, ()))]
+            for edge in edges:
+                target, wanted = edge.get('name', ''), set(edge.get('extra') or ())
+                if target not in active or not wanted <= active[target]:
+                    active.setdefault(target, set()).update(wanted)
+                    pending.append(target)
+    return {name: tuple(sorted(wanted)) for name, wanted in active.items() if wanted}
+
+
+def _pins_from_export(exported: str, extras: dict[str, tuple[str, ...]]) -> Pins:
     """A path requirement is neither kind, and is dropped: it is inside the commit being installed."""
     constraints: list[str] = []
     overrides: list[str] = []
@@ -217,17 +322,21 @@ def _pins_from_export(exported: str) -> Pins:
         line = line.strip()
         requirement = line.split(';', 1)[0]
         if ' @ ' in requirement:
-            overrides.append(line)
+            name, _, rest = line.partition(' @ ')
+            wanted = extras.get(name.strip())
+            overrides.append(f'{name.strip()}[{",".join(wanted)}] @ {rest}' if wanted else line)
         elif '==' in requirement:
             constraints.append(line)
     return Pins(tuple(constraints), tuple(overrides))
 
 
-def run_install(requirement: str, *, quiet: bool = True, pins: Pins | None = None) -> None:
-    """Install a requirement over the existing tool, held to `pins` when given.
+def run_install(requirement: str, *, quiet: bool = True, pins: Pins | None = None, with_requirements: Sequence[str] = ()) -> None:
+    """Install a requirement over any existing tool of that name, held to `pins` when given.
 
-    `--force` is what allows an entry point that already exists to be replaced;
-    without it uv refuses rather than overwriting.
+    `with_requirements` are requirements-file lines installed beside the tool,
+    the way `--with` and `--with-editable` install them. `--force` is what
+    allows an entry point that already exists to be replaced; without it uv
+    refuses rather than overwriting.
     """
     executable = shutil.which('uv')
     if not executable:
@@ -235,7 +344,12 @@ def run_install(requirement: str, *, quiet: bool = True, pins: Pins | None = Non
 
     with tempfile.TemporaryDirectory(prefix='pyselfupdate-pins-', ignore_cleanup_errors=True) as scratch:
         held = pins.arguments(Path(scratch)) if pins else []
-        command = [executable, 'tool', 'install', '--force', *held, requirement]
+        beside: list[str] = []
+        if with_requirements:
+            listed = Path(scratch) / 'with.txt'
+            listed.write_text(''.join(f'{line}\n' for line in with_requirements), encoding='utf-8')
+            beside = ['--with-requirements', str(listed)]
+        command = [executable, 'tool', 'install', '--force', *held, *beside, requirement]
         if quiet:
             command.insert(1, '--quiet')
         completed = _run(command)

@@ -67,10 +67,10 @@ class StubLock:
 
     pins: Pins | None = field(default_factory=lambda: Pins(constraints=('click==8.1.7',)))
     error: Exception | None = None
-    reads: list[tuple[str, str]] = field(default_factory=list)
+    reads: list[tuple[str, str, tuple[str, ...]]] = field(default_factory=list)
 
-    def __call__(self, url: str, ref: str) -> Pins | None:
-        self.reads.append((url, ref))
+    def __call__(self, url: str, ref: str, *, extras: tuple[str, ...] = ()) -> Pins | None:
+        self.reads.append((url, ref, tuple(extras)))
         if self.error is not None:
             raise self.error
         return self.pins

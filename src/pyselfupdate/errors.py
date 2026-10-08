@@ -24,7 +24,7 @@ class LocalInstallError(SelfUpdateError):
 
 
 class NotInstalledError(SelfUpdateError):
-    """The tool is not installed as a uv tool, so there is nothing to update."""
+    """uv's receipt for the tool is missing or unreadable, or lists a requirement an update cannot pass back to uv."""
 
 
 class NoReleaseError(SelfUpdateError):

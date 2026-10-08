@@ -8,6 +8,9 @@ are the parts that can be wrong. `test_lock.py` runs both for real.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 from conftest import StubLock
 from conftest import StubSource
@@ -19,10 +22,12 @@ from pyselfupdate.errors import InvalidConfigError
 from pyselfupdate.errors import LocalInstallError
 from pyselfupdate.errors import LockUnreadableError
 from pyselfupdate.errors import NoReleaseError
+from pyselfupdate.errors import NotInstalledError
 from pyselfupdate.install import Pins
 from pyselfupdate.updater import changelog
 from pyselfupdate.updater import check
 from pyselfupdate.updater import update
+from pyselfupdate.updater import update_and_reexec
 
 
 @pytest.fixture(autouse=True)
@@ -39,13 +44,20 @@ def held() -> list[Pins | None]:
 
 
 @pytest.fixture
-def installs(monkeypatch: pytest.MonkeyPatch, held: list[Pins | None]) -> list[str]:
+def beside() -> list[tuple[str, ...]]:
+    """The `with_requirements` each install was handed, in the order `installs` records them."""
+    return []
+
+
+@pytest.fixture
+def installs(monkeypatch: pytest.MonkeyPatch, held: list[Pins | None], beside: list[tuple[str, ...]]) -> list[str]:
     """Records the requirements that would have been installed."""
     recorded: list[str] = []
 
-    def record(requirement: str, quiet: bool = True, pins: Pins | None = None) -> None:
+    def record(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
         recorded.append(requirement)
         held.append(pins)
+        beside.append(tuple(with_requirements))
 
     monkeypatch.setattr(update_module, 'run_install', record)
     return recorded
@@ -123,15 +135,47 @@ def test_update_preserves_a_prefixed_tag(make_receipt, installs: list[str], lock
     update(Config(tool='icb', owner='x', version='0.3.0', source=source))
 
     assert installs == ['icb @ git+https://github.com/x/ichrisbirch.git@cli/v0.3.3']
-    assert lock.reads == [('https://github.com/x/ichrisbirch.git', 'cli/v0.3.3')]
+    assert lock.reads == [('https://github.com/x/ichrisbirch.git', 'cli/v0.3.3', ())]
 
 
-def test_a_git_update_is_held_to_the_lock_at_the_release_tag(pinned, installs, held, lock: StubLock) -> None:
-    result = update(config(StubSource(tag='v2.0.0')))
+def test_an_update_keeps_the_tools_extras_and_what_was_installed_beside_it(make_receipt, installs, beside, lock: StubLock) -> None:
+    make_receipt(
+        'demo',
+        '{ name = "demo", extras = ["fast"], git = "https://github.com/x/demo.git?rev=v1.0.0" }, '
+        '{ name = "plugin", specifier = ">=1" }, { name = "devplugin", editable = "/src/devplugin" }',
+    )
 
-    assert lock.reads == [('https://github.com/x/demo.git', 'v2.0.0')]
-    assert held == [lock.pins]
-    assert not result.lock_missing
+    update(config(StubSource(tag='v2.0.0')))
+
+    assert installs == ['demo[fast] @ git+https://github.com/x/demo.git@v2.0.0']
+    assert lock.reads == [('https://github.com/x/demo.git', 'v2.0.0', ('fast',))]
+    assert beside == [('plugin>=1', f'-e {Path("/src/devplugin").as_uri()}')]
+
+
+def test_a_requirement_an_update_cannot_pass_back_refuses_rather_than_dropping_it(make_receipt, installs: list[str]) -> None:
+    make_receipt(
+        'demo',
+        '{ name = "demo", git = "https://github.com/x/demo.git?rev=v1.0.0" }, { name = "plugin", virtual = "/src/plugin" }',
+    )
+
+    with pytest.raises(NotInstalledError, match='installed with plugin'):
+        update(config(StubSource(tag='v2.0.0')))
+    assert not installs
+
+
+def test_update_and_reexec_shows_the_lock_warning_before_replacing_the_process(
+    pinned, installs, lock: StubLock, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The caller never gets the Result back, so this is the only place the warning can appear."""
+    lock.pins = None
+    monkeypatch.setattr(update_module, 'reexec', lambda: print('reexec', file=sys.stderr))
+
+    update_and_reexec(config(StubSource(tag='v2.0.0')))
+
+    assert capsys.readouterr().err.splitlines() == [
+        '! demo: v2.0.0 has no uv.lock, so its dependencies resolved to the newest rather than what its CI tested',
+        'reexec',
+    ]
 
 
 def test_a_tag_with_no_lock_installs_unlocked_and_says_so(pinned, installs, held, lock: StubLock) -> None:
@@ -199,7 +243,7 @@ def test_update_refuses_before_checking_the_source(make_receipt) -> None:
 
 
 def test_an_install_failure_propagates(pinned, monkeypatch: pytest.MonkeyPatch) -> None:
-    def explode(requirement: str, quiet: bool = True, pins: Pins | None = None) -> None:
+    def explode(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
         raise InstallFailedError('uv tool install failed: no such ref')
 
     monkeypatch.setattr(update_module, 'run_install', explode)

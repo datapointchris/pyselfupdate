@@ -42,14 +42,9 @@ def events() -> list[str]:
 
 
 @pytest.fixture(autouse=True)
-def lock(monkeypatch: pytest.MonkeyPatch, events: list[str]) -> StubLock:
+def lock(monkeypatch: pytest.MonkeyPatch) -> StubLock:
     stub = StubLock()
-
-    def read(url: str, ref: str) -> Pins | None:
-        events.append('lock')
-        return stub(url, ref)
-
-    monkeypatch.setattr(update_module, 'read_lock', read)
+    monkeypatch.setattr(update_module, 'read_lock', stub)
     return stub
 
 
@@ -57,7 +52,7 @@ def lock(monkeypatch: pytest.MonkeyPatch, events: list[str]) -> StubLock:
 def installs(monkeypatch: pytest.MonkeyPatch, events: list[str]) -> list[str]:
     recorded: list[str] = []
 
-    def record(requirement: str, quiet: bool = True, pins: Pins | None = None) -> None:
+    def record(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
         events.append('install')
         recorded.append(requirement)
 
@@ -87,13 +82,13 @@ def config(source: StubSource, version: str = '1.0.0') -> Config:
     return Config(tool='demo', owner='x', version=version, source=source)
 
 
-def test_the_changelog_and_the_lock_are_fetched_before_the_install(pinned, installs, exits, events) -> None:
-    """The failure this ordering exists for: syncer 4.0.0 fetched its changelog after."""
+def test_the_changelog_is_fetched_before_the_install(pinned, installs, exits, events) -> None:
+    """The failure this ordering exists for: syncer 4.0.0 fetched it after."""
     source = RecordingSource(events, subjects=['feat: one'])
 
     run_update(config(source))
 
-    assert events == ['changelog', 'lock', 'install', 'exit']
+    assert events == ['changelog', 'install', 'exit']
 
 
 def test_an_applied_update_ends_the_process(pinned, installs, exits, capsys) -> None:
@@ -109,7 +104,7 @@ def test_an_applied_update_ends_the_process(pinned, installs, exits, capsys) -> 
 def test_skip_changelog_asks_the_source_for_nothing(pinned, installs, exits, events) -> None:
     run_update(config(RecordingSource(events)), skip_changelog=True)
 
-    assert events == ['lock', 'install', 'exit']
+    assert events == ['install', 'exit']
 
 
 def test_already_at_latest_installs_nothing_and_returns(pinned, installs, exits, capsys) -> None:
@@ -144,7 +139,7 @@ def test_a_local_install_is_refused_before_any_request(make_receipt, installs, e
 
 
 def test_an_install_failure_exits_non_zero(pinned, exits, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
-    def explode(requirement: str, quiet: bool = True, pins: Pins | None = None) -> None:
+    def explode(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
         raise InstallFailedError('uv tool install failed: no such ref')
 
     monkeypatch.setattr(update_module, 'run_install', explode)

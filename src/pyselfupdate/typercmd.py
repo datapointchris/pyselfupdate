@@ -88,9 +88,8 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
         raise typer.Exit(1) from error
 
     typer.echo(f'✓ {tool} updated: {result.current} → {result.latest}')
-    if installed.lock_missing:
-        tag = installed.release.install_ref() if installed.release else installed.latest
-        typer.echo(f'! {tool}: {tag} has no uv.lock, so its dependencies resolved to the newest rather than what its CI tested', err=True)
+    if installed.lock_warning:
+        typer.echo(f'! {tool}: {installed.lock_warning}', err=True)
     _echo_changes(subjects)
     exit_now()
 

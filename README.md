@@ -32,9 +32,9 @@ version exists, so it silently drifts. The usual fix drags an HTTP client, a
 TOML parser and a version library into a tool that had none of them.
 
 This package has zero runtime dependencies — `urllib` for the network,
-`tomllib` for uv's receipt, and its own semver implementation — and CI enforces
-that by importing every module into a virtual environment containing nothing
-else.
+`tomllib` for uv's receipt and lock, and its own semver implementation — and
+CI enforces that by importing every module into a virtual environment
+containing nothing else.
 
 ## notify
 
@@ -104,7 +104,8 @@ environment the running interpreter lives in**. Unlike replacing a Unix binary
 from under a live process, so anything imported afterwards may fail in ways
 that are hard to read. Make it the last thing your process does, then call
 `exit_now` — or use `update_and_reexec` to replace the process with the new
-version immediately.
+version immediately. Its caller never sees the `Result`, so it writes
+`lock_warning` to stderr itself before the re-exec.
 
 That cuts both ways: anything you want to *print* after the install has to be
 fetched before it. `run_update` resolves its changelog first for exactly this
@@ -115,8 +116,10 @@ pieces `update` is made of rather than working around it:
 installation = require_updatable(config)  # refuses a checkout, costs nothing
 result = check(config)  # network, environment still intact
 notes = changelog(config, result.current, result.latest)
-install_release(config, result, installation)
+installed = install_release(config, result, installation)
 print(notes)
+if installed.lock_warning:
+    print(installed.lock_warning, file=sys.stderr)
 exit_now()
 ```
 
@@ -131,10 +134,14 @@ never tested. `update` therefore clones the release's tag, exports its
 | The tag | What `update` does |
 | --- | --- |
 | Carries a `uv.lock` | Installs the locked versions |
-| Carries none | Installs unlocked and returns `lock_missing=True`. `run_update` prints a warning naming the tag |
+| Carries none | Installs unlocked and sets `lock_missing`. `lock_warning` names the tag, and `run_update` prints it |
 | Will not clone, or uv will not export its lock | Raises `LockUnreadableError` and installs nothing |
 
 An install from an index is unchanged, because a wheel carries no lock.
+
+An update keeps what the tool was installed with. Its own extras, as in
+`mytool[fast]`, are reinstalled and their dependencies held to the lock. Every
+`--with` and `--with-editable` requirement is passed back to uv.
 
 ## What will not be updated
 
@@ -147,6 +154,7 @@ runtime:
 | `name = "mytool"` (from an index) | Updatable |
 | `git = "...git"` with no `rev` | Refused — tracks a branch, so its version says nothing about how far behind it is |
 | `directory` / `path` / `editable` | Refused — reinstalling would discard a working copy |
+| A `--with` requirement in a form an update cannot pass back to uv | Refused with `NotInstalledError` — the update would drop it |
 
 A tool that cannot be identified at all is treated as local and left alone.
 

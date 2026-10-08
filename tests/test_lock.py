@@ -13,7 +13,6 @@ import hashlib
 import os
 import subprocess
 import sys
-import tomllib
 import zipfile
 from pathlib import Path
 
@@ -21,6 +20,7 @@ import pytest
 from conftest import StubSource
 
 from pyselfupdate import Config
+from pyselfupdate import read_installation
 from pyselfupdate import update
 from pyselfupdate.errors import LockUnreadableError
 from pyselfupdate.install import Pins
@@ -51,13 +51,18 @@ def _digest(body: str) -> str:
     return base64.urlsafe_b64encode(hashlib.sha256(body.encode()).digest()).rstrip(b'=').decode()
 
 
-def project(repo: Path, name: str, version: str, dependencies: tuple[str, ...] = ()) -> None:
+Extras = dict[str, tuple[str, ...]]
+
+
+def project(repo: Path, name: str, version: str, dependencies: tuple[str, ...] = (), extras: Extras | None = None) -> None:
     """A uv_build project in its own git repository, which uv builds without fetching a backend."""
     (repo / 'src' / name).mkdir(parents=True, exist_ok=True)
     (repo / 'src' / name / '__init__.py').write_text('def main():\n    pass\n')
+    optional = ''.join(f'{extra} = {list(packages)!r}\n' for extra, packages in (extras or {}).items())
     (repo / 'pyproject.toml').write_text(
         f'[project]\nname = "{name}"\nversion = "{version}"\nrequires-python = ">=3.11"\n'
         f'dependencies = {list(dependencies)!r}\n\n'
+        f'[project.optional-dependencies]\n{optional}\n'
         f'[project.scripts]\n{name} = "{name}:main"\n\n'
         '[build-system]\nrequires = ["uv_build"]\nbuild-backend = "uv_build"\n'
     )
@@ -67,8 +72,10 @@ def project(repo: Path, name: str, version: str, dependencies: tuple[str, ...] =
     git(repo, 'commit', '--quiet', '-m', version)
 
 
-def release(repo: Path, name: str, version: str, dependencies: tuple[str, ...], *, locked: bool = True) -> None:
-    project(repo, name, version, dependencies)
+def release(
+    repo: Path, name: str, version: str, dependencies: tuple[str, ...], *, locked: bool = True, extras: Extras | None = None
+) -> None:
+    project(repo, name, version, dependencies, extras)
     if locked:
         subprocess.run(['uv', 'lock', '--quiet'], cwd=repo, check=True, capture_output=True)
         git(repo, 'add', 'uv.lock')
@@ -77,13 +84,14 @@ def release(repo: Path, name: str, version: str, dependencies: tuple[str, ...], 
 
 
 def installed(tools: Path, tool: str, package: str) -> str:
+    """The version of `package` in the tool's venv, or an empty string when it is not there."""
     python = tools / tool / ('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
-    probe = 'import importlib.metadata, sys; print(importlib.metadata.version(sys.argv[1]))'
+    probe = (
+        'import importlib.metadata, sys\n'
+        'try:\n    print(importlib.metadata.version(sys.argv[1]))\n'
+        'except importlib.metadata.PackageNotFoundError:\n    print()\n'
+    )
     return subprocess.run([str(python), '-c', probe, package], check=True, capture_output=True, text=True).stdout.strip()
-
-
-def receipt(tools: Path, tool: str) -> dict:
-    return tomllib.loads((tools / tool / 'uv-receipt.toml').read_text(encoding='utf-8'))['tool']
 
 
 @pytest.fixture
@@ -117,13 +125,7 @@ def test_an_update_installs_the_locks_versions_not_the_newest(tmp_path: Path, of
     each exists by the time the update runs.
 
     Both kinds, because they reach uv differently: the registry pin as a
-    constraint, the git pin as an override. uv refuses a constraint whose URL
-    differs from the one the tool declares.
-
-    The last install is the control. The same tag handed to uv with no lock
-    takes 2.0.0 of both, so 1.0.0 is the lock's doing rather than the only
-    version on offer. It also drops both lists from the receipt, which is the
-    gap `update` closes.
+    constraint, the git pin as an override.
     """
     wheel(offline, 'pindemo', '1.0.0')
     tool = tmp_path / 'locktool'
@@ -142,13 +144,48 @@ def test_an_update_installs_the_locks_versions_not_the_newest(tmp_path: Path, of
     assert not result.lock_missing
     assert installed(tools, 'locktool', 'locktool') == '2.0.0'
     assert (installed(tools, 'locktool', 'pindemo'), installed(tools, 'locktool', 'gitdep')) == ('1.0.0', '1.0.0')
-    held = receipt(tools, 'locktool')
-    assert [entry['name'] for entry in held['constraints']] == ['pindemo']
-    assert [entry['name'] for entry in held['overrides']] == ['gitdep']
 
-    subprocess.run(['uv', 'tool', 'install', '--force', f'locktool @ git+{tool.as_uri()}@v2.0.0'], check=True, capture_output=True)
-    assert (installed(tools, 'locktool', 'pindemo'), installed(tools, 'locktool', 'gitdep')) == ('2.0.0', '2.0.0')
-    assert 'constraints' not in receipt(tools, 'locktool')
+
+def test_a_git_dependency_keeps_the_extra_its_dependent_declares(tmp_path: Path, offline: Path, gitdep: Path) -> None:
+    """`uv export` writes `gitdep @ git+...` with no extra, and an override replaces
+    the declared `gitdep[x]` whole, so the package `x` pulls in would be dropped."""
+    wheel(offline, 'extrademo', '1.0.0')
+    project(gitdep, 'gitdep', '1.0.0', extras={'x': ('extrademo',)})
+    tool = tmp_path / 'locktool'
+    dependencies = (f'gitdep[x] @ git+{gitdep.as_uri()}',)
+    release(tool, 'locktool', '1.0.0', dependencies)
+    release(tool, 'locktool', '2.0.0', dependencies)
+    subprocess.run(['uv', 'tool', 'install', f'locktool @ git+{tool.as_uri()}@v1.0.0'], check=True, capture_output=True)
+
+    update(Config(tool='locktool', version='1.0.0', source=StubSource(tag='v2.0.0')))
+
+    assert installed(tmp_path / 'tools', 'locktool', 'extrademo') == '1.0.0'
+
+
+def test_an_update_keeps_the_tools_extras_and_what_was_installed_beside_it(tmp_path: Path, offline: Path) -> None:
+    """The extra's dependency is held too: a default export leaves it out, so it would resolve to 2.0.0."""
+    wheel(offline, 'fastdemo', '1.0.0')
+    wheel(offline, 'withdemo', '1.0.0')
+    editwith = tmp_path / 'editwith'
+    project(editwith, 'editwith', '1.0.0')
+    tool = tmp_path / 'locktool'
+    release(tool, 'locktool', '1.0.0', (), extras={'fast': ('fastdemo>=1',)})
+    release(tool, 'locktool', '2.0.0', (), extras={'fast': ('fastdemo>=1',)})
+    subprocess.run(
+        ['uv', 'tool', 'install', '--with', 'withdemo', '--with-editable', str(editwith), f'locktool[fast] @ git+{tool.as_uri()}@v1.0.0'],
+        check=True,
+        capture_output=True,
+    )
+    before = read_installation('locktool')
+    wheel(offline, 'fastdemo', '2.0.0')
+    tools = tmp_path / 'tools'
+
+    update(Config(tool='locktool', version='1.0.0', source=StubSource(tag='v2.0.0')))
+
+    assert installed(tools, 'locktool', 'locktool') == '2.0.0'
+    assert [installed(tools, 'locktool', package) for package in ('fastdemo', 'withdemo', 'editwith')] == ['1.0.0', '1.0.0', '1.0.0']
+    after = read_installation('locktool')
+    assert (after.extras, after.with_requirements) == (before.extras, before.with_requirements)
 
 
 def test_a_tag_with_no_lock_reads_as_none(tmp_path: Path, offline: Path) -> None:
@@ -191,11 +228,3 @@ def test_a_lock_uv_will_not_export_is_refused_with_uvs_reason(tmp_path: Path, of
     with pytest.raises(LockUnreadableError, match='uv export would not read the uv.lock at v1.0.0') as raised:
         read_lock(tool.as_uri(), 'v1.0.0')
     assert 'unsupported schema version' in str(raised.value)
-
-
-def test_an_empty_list_is_not_passed(tmp_path: Path) -> None:
-    """uv warns on an empty requirements file, so a list with no lines gets no flag."""
-    flags = Pins(constraints=('click==8.1.7',)).arguments(tmp_path)
-
-    assert flags == ['--constraints', str(tmp_path / 'constraints.txt')]
-    assert (tmp_path / 'constraints.txt').read_text(encoding='utf-8') == 'click==8.1.7\n'

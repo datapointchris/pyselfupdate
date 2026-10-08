@@ -70,6 +70,51 @@ def test_reads_an_index_install(make_receipt) -> None:
     assert installation.is_updatable()
 
 
+def test_reads_the_tools_extras_and_rebuilds_what_was_installed_beside_it(make_receipt, tmp_path: Path) -> None:
+    """Every shape a `--with` or `--with-editable` writes into a receipt, as a line uv reads back."""
+    local, editable = tmp_path / 'localwith', tmp_path / 'editwith'
+    make_receipt(
+        'syncer',
+        '{ name = "syncer", extras = ["fast"], git = "https://github.com/x/syncer.git?rev=v4.0.0" }, '
+        """{ name = "withdemo", marker = "python_full_version >= '3.11'", specifier = ">=1" }, """
+        '{ name = "gitwith", git = "https://github.com/x/gitwith.git?rev=v1.0.0" }, '
+        '{ name = "subwith", git = "https://github.com/x/mono.git?subdirectory=pkg&tag=v2" }, '
+        '{ name = "urlwith", url = "https://example.invalid/urlwith-1.0.tar.gz" }, '
+        f'{{ name = "localwith", directory = "{local.as_posix()}" }}, '
+        f'{{ name = "editwith", editable = "{editable.as_posix()}" }}',
+    )
+
+    installation = read_installation('syncer')
+
+    assert installation.extras == ('fast',)
+    assert installation.with_requirements == (
+        "withdemo>=1 ; python_full_version >= '3.11'",
+        'gitwith @ git+https://github.com/x/gitwith.git@v1.0.0',
+        'subwith @ git+https://github.com/x/mono.git@v2#subdirectory=pkg',
+        'urlwith @ https://example.invalid/urlwith-1.0.tar.gz',
+        f'localwith @ {local.as_uri()}',
+        f'-e {editable.as_uri()}',
+    )
+
+
+def test_a_requirement_no_line_can_reproduce_does_not_fail_the_read(make_receipt) -> None:
+    """The notify gate reads the receipt too, and a failed read silences it; `update` refuses instead."""
+    make_receipt(
+        'syncer',
+        '{ name = "syncer", git = "https://github.com/x/syncer.git?rev=v4.0.0" }, { name = "plugin", virtual = "/src/plugin" }',
+    )
+
+    installation = read_installation('syncer')
+
+    assert installation.kind is InstallKind.GIT
+    assert installation.with_requirements == ()
+
+
+def test_requirement_for_carries_the_tools_extras() -> None:
+    installation = Installation('syncer', InstallKind.GIT, url='https://github.com/x/syncer.git', revision='v1.0.0', extras=('fast', 'tui'))
+    assert requirement_for(installation, 'v2.0.0') == 'syncer[fast,tui] @ git+https://github.com/x/syncer.git@v2.0.0'
+
+
 @pytest.mark.parametrize('key', ['directory', 'path', 'editable'])
 def test_reads_a_local_install_however_uv_spelled_it(make_receipt, key: str) -> None:
     make_receipt('dectl', f'{{ name = "dectl", {key} = "/Users/chris/tools/dectl" }}')

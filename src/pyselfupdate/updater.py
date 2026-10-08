@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -9,6 +10,7 @@ from pyselfupdate import version as semver
 from pyselfupdate.config import Config
 from pyselfupdate.errors import LocalInstallError
 from pyselfupdate.errors import NoReleaseError
+from pyselfupdate.errors import NotInstalledError
 from pyselfupdate.install import Installation
 from pyselfupdate.install import InstallKind
 from pyselfupdate.install import read_installation
@@ -43,6 +45,14 @@ class Result:
     @property
     def update_available(self) -> bool:
         return self.current != self.latest
+
+    @property
+    def lock_warning(self) -> str:
+        """The sentence every caller shows for `lock_missing`, or an empty string."""
+        if not self.lock_missing:
+            return ''
+        tag = self.release.install_ref() if self.release else self.latest
+        return f'{tag} has no uv.lock, so its dependencies resolved to the newest rather than what its CI tested'
 
 
 def check(config: Config) -> Result:
@@ -90,8 +100,8 @@ def install_release(config: Config, result: Result, installation: Installation, 
         return result
 
     ref = result.release.install_ref()
-    pins = read_lock(installation.url, ref) if installation.kind is InstallKind.GIT else None
-    run_install(requirement_for(installation, ref), quiet=quiet, pins=pins)
+    pins = read_lock(installation.url, ref, extras=installation.extras) if installation.kind is InstallKind.GIT else None
+    run_install(requirement_for(installation, ref), quiet=quiet, pins=pins, with_requirements=installation.with_requirements)
 
     return Result(
         current=result.current,
@@ -120,10 +130,13 @@ def update_and_reexec(config: Config, *, quiet: bool = True) -> Result:
     """`update`, then replace this process when anything was installed.
 
     Returns normally only when nothing was installed; otherwise it does not
-    return at all.
+    return at all. The caller never sees the `Result` of an install, so this
+    writes its `lock_warning` to stderr before the re-exec.
     """
     result = update(config, quiet=quiet)
     if result.applied:
+        if result.lock_warning:
+            print(f'! {config.tool}: {result.lock_warning}', file=sys.stderr)
         reexec()
     return result
 
@@ -164,4 +177,9 @@ def _require_updatable(installation: Installation) -> None:
             f'{installation.tool} is installed from a branch rather than a tag, '
             f'so a release version cannot be compared against it; '
             f'reinstall from a tagged release to enable updates'
+        )
+    if installation._unrebuildable:
+        raise NotInstalledError(
+            f'{installation.tool} was installed with {", ".join(installation._unrebuildable)} '
+            f'in a form an update cannot pass back to uv, so updating would drop it; reinstall it by hand'
         )
