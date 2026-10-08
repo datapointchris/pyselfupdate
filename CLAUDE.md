@@ -50,10 +50,11 @@ to the function and fail on attribute access. Do not rename them back.
   HTTP client at all, so those five would inherit the whole closure for having
   wanted a self-update check.
 
-  What it would buy does not reach here. This package makes one request, to
-  `api.github.com`, for JSON. It downloads no assets: `install.run_install`
-  shells out to `uv tool install --force` and `install.read_lock` to
-  `git clone`, so there is no CDN redirect for a token to leak into, and nothing needs a client object, connection reuse or
+  What it would buy does not reach here. This package's own code makes one
+  HTTP request, to `api.github.com`, for JSON. Every other fetch is a
+  subprocess: `install.run_install` runs `uv tool install --force` and
+  `install.read_lock` runs `git clone`. So there is no CDN redirect for a token
+  to leak into, and nothing needs a client object, connection reuse or
   streaming. Revisit if a second HTTP need appears — at that point the closure
   is buying something.
 - **typer stays confined to `typercmd.py`,** installed via the `typer` extra.
@@ -62,8 +63,8 @@ to the function and fail on attribute access. Do not rename them back.
   to get what Go gets free from module graph pruning.
 - **The floor is Python 3.11 and CI tests against it.** This is a sanctioned
   exception to the fleet's 3.13 floor, recorded in `standards/python.md`:
-  3.11 is what `tomllib` requires, which is what lets uv's receipt be read
-  without a dependency. Raising it excludes callers.
+  3.11 is what `tomllib` requires, which is what lets uv's receipt and lock be
+  read without a dependency. Raising it excludes callers.
 - **Errors are typed.** A new failure mode gets a class in `errors.py`; callers
   must never have to match on message text.
 - **The machine in the state filename is derived identically in all three
@@ -105,7 +106,7 @@ that is correct.
 The Python signal is **uv's own receipt** (`<uv tool dir>/<tool>/uv-receipt.toml`),
 written at install time, which says whether the tool came from a tag, a branch
 or a local path. That is strictly better than inferring it at runtime: the
-installer knows how the tool got there and the running program does not. Three
+installer knows how the tool got there and the running program does not. Two
 kinds are refused — `LOCAL` (a path or editable checkout), and `GIT` with no
 `rev=` (tracking a branch, so its version says nothing about how far behind it
 is).
@@ -153,6 +154,9 @@ The changelog is the GitHub release body, written by python-semantic-release
 from the commit subjects in the release. Nothing commits it back to the repo, so
 the commit message is where a change explains itself to a consumer.
 
-After releasing, bump consumers with `uv add pyselfupdate@latest`. During
-development, point a consumer at the local checkout with `tool.uv.sources`
-rather than publishing a version per change.
+After releasing, bump each consumer with `uv add 'pyselfupdate[typer]>=<version>'`,
+or without `[typer]` where it declares none. That raises the floor and moves the
+lock together. A consumer's locked install runs the version its lock names, so
+a lock left behind keeps the old release. During development, point a consumer
+at the local checkout with `tool.uv.sources` rather than publishing a version
+per change.
