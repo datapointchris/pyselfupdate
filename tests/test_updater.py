@@ -138,18 +138,21 @@ def test_update_preserves_a_prefixed_tag(make_receipt, installs: list[str], lock
     assert lock.reads == [('https://github.com/x/ichrisbirch.git', 'cli/v0.3.3', ())]
 
 
-def test_an_update_keeps_the_tools_extras_and_what_was_installed_beside_it(make_receipt, installs, beside, lock: StubLock) -> None:
+def test_an_update_keeps_the_tools_extras_and_what_was_installed_beside_it(
+    make_receipt, installs, beside, lock: StubLock, tmp_path: Path
+) -> None:
+    devplugin = tmp_path / 'devplugin'
     make_receipt(
         'demo',
         '{ name = "demo", extras = ["fast"], git = "https://github.com/x/demo.git?rev=v1.0.0" }, '
-        '{ name = "plugin", specifier = ">=1" }, { name = "devplugin", editable = "/src/devplugin" }',
+        f'{{ name = "plugin", specifier = ">=1" }}, {{ name = "devplugin", editable = "{devplugin.as_posix()}" }}',
     )
 
     update(config(StubSource(tag='v2.0.0')))
 
     assert installs == ['demo[fast] @ git+https://github.com/x/demo.git@v2.0.0']
     assert lock.reads == [('https://github.com/x/demo.git', 'v2.0.0', ('fast',))]
-    assert beside == [('plugin>=1', f'-e {Path("/src/devplugin").as_uri()}')]
+    assert beside == [('plugin>=1', f'-e {devplugin.as_uri()}')]
 
 
 def test_a_requirement_an_update_cannot_pass_back_refuses_rather_than_dropping_it(make_receipt, installs: list[str]) -> None:
