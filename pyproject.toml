@@ -142,6 +142,9 @@ sqlalchemy = "sa"
 "pyspark.sql.types" = "st"
 
 [tool.semantic_release]
+# A feature release on 0.x stays on 0.x. python-semantic-release v10 defaults
+# this to false, which makes the next release of a 0.x project 1.0.0.
+allow_zero_version = true
 version_toml = ["pyproject.toml:project.version"]
 commit_message = "build(release): {version}"
 # Reads the uv-lock hook's rev, the one uv release every uv.lock writer runs.
