@@ -1,4 +1,4 @@
-# forge-toolchain: 38
+# forge-toolchain: 39
 name: CI
 
 on:
@@ -11,7 +11,7 @@ permissions:
 jobs:
 
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
 
       - uses: actions/checkout@v7
@@ -84,7 +84,7 @@ jobs:
         run: uv run bandit -c pyproject.toml -r src
 
   hooks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
 
       - uses: actions/checkout@v7
