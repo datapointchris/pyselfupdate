@@ -27,6 +27,7 @@ from dataclasses import field
 from enum import Enum
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as installed_version
+from itertools import chain
 from pathlib import Path
 
 from pyselfupdate.errors import InstallFailedError
@@ -281,7 +282,7 @@ def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
         lock = checkout / LOCK_NAME
         if not lock.is_file():
             return None
-        exported = _run([uv, *EXPORT, *(flag for extra in extras for flag in ('--extra', extra))], cwd=checkout)
+        exported = _run([uv, *EXPORT, *chain.from_iterable(('--extra', extra) for extra in extras)], cwd=checkout)
         if exported.returncode != 0:
             raise LockUnreadableError(f'uv export would not read the uv.lock at {ref}: {_reason(exported)}')
         try:
@@ -308,7 +309,9 @@ def _override_extras(lock: dict, extras: Sequence[str]) -> dict[str, tuple[str, 
     for package in lock.get('package') or []:
         packages.setdefault(package.get('name', ''), []).append(package)
     project = ({'editable': '.'}, {'virtual': '.'})
-    roots = [name for name, entries in packages.items() for package in entries if package.get('source') in project]
+    roots: list[str] = []
+    for name, entries in packages.items():
+        roots.extend(name for package in entries if package.get('source') in project)
 
     active: dict[str, set[str]] = {root: set(extras) for root in roots}
     pending = list(roots)
@@ -316,7 +319,8 @@ def _override_extras(lock: dict, extras: Sequence[str]) -> dict[str, tuple[str, 
         name = pending.pop()
         for package in packages.get(name, ()):
             groups = package.get('optional-dependencies') or {}
-            edges = [*(package.get('dependencies') or ()), *(edge for extra in sorted(active[name]) for edge in groups.get(extra, ()))]
+            optional = chain.from_iterable(groups.get(extra, ()) for extra in sorted(active[name]))
+            edges = [*(package.get('dependencies') or ()), *optional]
             for edge in edges:
                 target, wanted = edge.get('name', ''), set(edge.get('extra') or ())
                 if target not in active or not wanted <= active[target]:
