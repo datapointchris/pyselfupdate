@@ -141,6 +141,11 @@ Push a conventional commit to main. python-semantic-release decides the version,
 tags, and creates the GitHub release; a second job in the same workflow builds
 and publishes to PyPI with Trusted Publishing.
 
+The tag is the version. pyproject.toml declares it dynamic, and hatchling reads
+it through uv-dynamic-versioning, so the release writes no commit and the tag
+sits on the merged commit. The publish job checks out the tag for that reason: a
+build anywhere else names the previous release plus a distance.
+
 Both jobs are in one workflow because **a tag pushed with `GITHUB_TOKEN` does
 not trigger another workflow run** — a publish keyed on `release: published`
 would never fire. There is a `publish.yml.disabled` in `logsift` making exactly

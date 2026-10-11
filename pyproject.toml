@@ -1,6 +1,6 @@
 [project]
 name = "pyselfupdate"
-version = "0.5.0"
+dynamic = ["version"]
 description = "Self-update and update notification for Python CLIs installed with uv tool"
 authors = [{ name = "Chris Birch", email = "datapointchris@gmail.com" }]
 license = "MIT"
@@ -149,14 +149,6 @@ allow_zero_version = true
 # 1.0 is a compatibility promise, so a breaking change on 0.x is a minor bump.
 # Removing this key is how the project reaches 1.0.
 major_on_zero = false
-version_toml = ["pyproject.toml:project.version"]
-commit_message = "build(release): {version}"
-# Reads the uv-lock hook's rev, the one uv release every uv.lock writer runs.
-build_command = '''
-    pip install "uv==$(python -c 'import re; print(re.search(r"uv-pre-commit\s+rev: \"?([\w.]+)", open(".pre-commit-config.yaml").read())[1])')"
-    uv lock --upgrade-package pyselfupdate
-    git add uv.lock
-'''
 
 
 # ---------- Build System ---------- #
@@ -205,10 +197,24 @@ managed = [
 # and extra that names them, so a local run and CI cannot disagree.
 pinned = ["ruff"]
 
-[build-system]
-requires = ["uv_build>=0.12.2,<0.13.0"]
-build-backend = "uv_build"
+# The release tag is the version. python-semantic-release finds no file to
+# stamp, so it tags the merge commit itself and writes no release commit.
+# uv_build cannot do this: its metadata has no dynamic version field.
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
 
-[tool.uv.build-backend]
-module-name = "pyselfupdate"
-module-root = "src"
+[tool.uv-dynamic-versioning]
+style = "semver"
+
+# A new commit or tag changes the version, so it has to invalidate uv's cache.
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+
+# The published sdist holds the package and its metadata, and none of the
+# repo's tooling or tests, as uv_build's did.
+[tool.hatch.build.targets.sdist]
+only-include = ["src"]
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
