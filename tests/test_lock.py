@@ -40,14 +40,14 @@ def wheel(index: Path, name: str, version: str) -> None:
         f'{info}/METADATA': f'Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n',
         f'{info}/WHEEL': 'Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n',
     }
-    record = [f'{path},sha256={_digest(body)},{len(body.encode())}' for path, body in files.items()]
+    record = [f'{path},sha256={digest(body)},{len(body.encode())}' for path, body in files.items()]
     files[f'{info}/RECORD'] = '\n'.join([*record, f'{info}/RECORD,,', ''])
     with zipfile.ZipFile(index / f'{name}-{version}-py3-none-any.whl', 'w') as packed:
         for path, body in files.items():
             packed.writestr(path, body)
 
 
-def _digest(body: str) -> str:
+def digest(body: str) -> str:
     return base64.urlsafe_b64encode(hashlib.sha256(body.encode()).digest()).rstrip(b'=').decode()
 
 

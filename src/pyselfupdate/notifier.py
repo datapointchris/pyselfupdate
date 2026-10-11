@@ -105,7 +105,7 @@ def enabled(config: Config, *, interactive: bool | None = None) -> tuple[bool, S
         return False, Skip.DISABLED
     if _asking_for_help():
         return False, Skip.HELP
-    if not (_is_interactive() if interactive is None else interactive):
+    if not (is_interactive() if interactive is None else interactive):
         return False, Skip.NOT_A_TTY
     if _in_ci():
         return False, Skip.CI
@@ -208,7 +208,7 @@ def _in_ci() -> bool:
     return any(name in os.environ for name in CI_VARIABLES)
 
 
-def _is_interactive(streams: Iterable[Any] | None = None) -> bool:
+def is_interactive(streams: Iterable[Any] | None = None) -> bool:
     """Both streams must be terminals.
 
     Checking both matters: `tool list | jq` should still be allowed to notify on
@@ -254,13 +254,13 @@ def _interval(tool: str, override: dt.timedelta | None) -> dt.timedelta:
     for name in (_tool_variable(tool, 'AUTO_UPDATE_INTERVAL'), FLEET_INTERVAL):
         raw = os.environ.get(name)
         if raw:
-            parsed = _parse_interval(raw)
+            parsed = parse_interval(raw)
             if parsed is not None:
                 return parsed
     return DEFAULT_INTERVAL
 
 
-def _parse_interval(raw: str) -> dt.timedelta | None:
+def parse_interval(raw: str) -> dt.timedelta | None:
     """Parse `30m`, `24h`, `7d`, or a bare number of seconds."""
     raw = raw.strip().lower()
     if not raw:

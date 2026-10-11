@@ -21,9 +21,9 @@ from pyselfupdate import Config
 from pyselfupdate import notify
 from pyselfupdate.errors import SourceError
 from pyselfupdate.notifier import Skip
-from pyselfupdate.notifier import _is_interactive
-from pyselfupdate.notifier import _parse_interval
 from pyselfupdate.notifier import enabled
+from pyselfupdate.notifier import is_interactive
+from pyselfupdate.notifier import parse_interval
 
 # An interval of zero: the next call is always due. Named because a bare
 # timedelta() at a call site reads as an oversight rather than the point.
@@ -155,14 +155,14 @@ def test_a_non_terminal_is_never_notified(pinned, state_home: Path, out) -> None
 )
 def test_terminal_detection_requires_both_streams(stdout_tty: bool, stderr_tty: bool, expected: bool) -> None:
     streams = (FakeStream(tty=stdout_tty), FakeStream(tty=stderr_tty))
-    assert _is_interactive(streams) is expected
+    assert is_interactive(streams) is expected
 
 
 def test_terminal_detection_survives_a_stream_without_isatty() -> None:
     class Bare:
         pass
 
-    assert _is_interactive((Bare(),)) is False
+    assert is_interactive((Bare(),)) is False
 
 
 def test_a_local_install_is_never_notified(make_receipt, state_home: Path, out) -> None:
@@ -223,14 +223,14 @@ def test_notify_never_raises_even_when_everything_is_wrong(state_home: Path, out
     [('30s', 30), ('30m', 1800), ('24h', 86400), ('7d', 604800), ('90', 90), ('1.5h', 5400)],
 )
 def test_interval_parsing(raw: str, seconds: float) -> None:
-    parsed = _parse_interval(raw)
+    parsed = parse_interval(raw)
     assert parsed is not None
     assert parsed.total_seconds() == seconds
 
 
 @pytest.mark.parametrize('raw', ['', 'soon', '-1h', 'h', 'abc'])
 def test_unparseable_intervals_are_ignored(raw: str) -> None:
-    assert _parse_interval(raw) is None
+    assert parse_interval(raw) is None
 
 
 def test_the_tool_interval_outranks_the_fleet_interval(pinned, state_home: Path, out, monkeypatch: pytest.MonkeyPatch) -> None:

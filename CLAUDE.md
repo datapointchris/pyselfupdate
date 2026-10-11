@@ -130,7 +130,7 @@ an install.
 **Terminal detection is injected, never faked by reassigning `sys.stdout`** —
 `standards/python.md` § "Inject terminal detection; never monkeypatch it" carries
 the pytest-capture reason and the pager affordance. The seams here are
-`notify(interactive=...)` and `_is_interactive(streams)`.
+`notify(interactive=...)` and `is_interactive(streams)`.
 
 `clean_environment` is autouse and clears every variable the gate reads, so a
 developer's own `CI=1` cannot change the result.
