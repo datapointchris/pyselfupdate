@@ -166,7 +166,7 @@ def test_terminal_detection_survives_a_stream_without_isatty() -> None:
 
 
 def test_a_local_install_is_never_notified(make_receipt, state_home: Path, out) -> None:
-    make_receipt('demo', '{ name = "demo", editable = "/Users/chris/tools/demo" }')
+    make_receipt('demo', '{ name = "demo", editable = "/src/demo" }')
     source = StubSource(tag='v2.0.0')
 
     assert notify(config(source), defer=False, interactive=True, out=out).skip is Skip.LOCAL_INSTALL

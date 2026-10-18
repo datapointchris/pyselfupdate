@@ -50,13 +50,12 @@ def test_reads_a_pinned_git_install(make_receipt) -> None:
 def test_reads_a_branch_tracking_git_install(make_receipt) -> None:
     """No `rev=` means the install follows the default branch.
 
-    This is what relate and indy look like today, and it is why the notify gate
-    has to treat an empty revision as a dev install: the version such a build
-    reports says nothing about how far behind the checkout is.
+    The notify gate and `update` refuse it: the version such a build reports
+    says nothing about how far behind the checkout is.
     """
-    make_receipt('relate', '{ name = "relate", git = "https://github.com/datapointchris/relate.git" }')
+    make_receipt('mytool', '{ name = "mytool", git = "https://github.com/x/mytool.git" }')
 
-    installation = read_installation('relate')
+    installation = read_installation('mytool')
     assert installation.kind is InstallKind.GIT
     assert installation.revision == ''
 
@@ -115,9 +114,9 @@ def test_requirement_for_carries_the_tools_extras() -> None:
 
 @pytest.mark.parametrize('key', ['directory', 'path', 'editable'])
 def test_reads_a_local_install_however_uv_spelled_it(make_receipt, key: str) -> None:
-    make_receipt('dectl', f'{{ name = "dectl", {key} = "/Users/chris/tools/dectl" }}')
+    make_receipt('mytool', f'{{ name = "mytool", {key} = "/src/mytool" }}')
 
-    installation = read_installation('dectl')
+    installation = read_installation('mytool')
     assert installation.kind is InstallKind.LOCAL
 
 

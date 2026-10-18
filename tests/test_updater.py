@@ -217,7 +217,7 @@ def test_update_is_a_no_op_when_current(pinned, installs: list[str]) -> None:
 
 
 def test_update_refuses_a_local_install(make_receipt, installs: list[str]) -> None:
-    make_receipt('demo', '{ name = "demo", editable = "/Users/chris/tools/demo" }')
+    make_receipt('demo', '{ name = "demo", editable = "/src/demo" }')
 
     with pytest.raises(LocalInstallError, match='update the checkout'):
         update(config(StubSource(tag='v2.0.0')))
