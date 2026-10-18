@@ -85,14 +85,20 @@ class Installation:
 
 
 def tool_dir() -> Path:
-    """uv's tool directory.
+    """uv's tool directory, in the order uv resolves it.
 
+    `UV_TOOL_DIR` first. Otherwise uv's data directory: `%APPDATA%\\uv\\data` on
+    Windows, and `$XDG_DATA_HOME/uv` or `~/.local/share/uv` everywhere else.
     Resolved from the environment rather than by running `uv tool dir`, which
     costs a subprocess on a path that runs before every command.
     """
     override = os.environ.get('UV_TOOL_DIR')
     if override:
         return Path(override).expanduser()
+    if sys.platform == 'win32':
+        appdata = os.environ.get('APPDATA')
+        roaming = Path(appdata) if appdata else Path.home() / 'AppData' / 'Roaming'
+        return roaming / 'uv' / 'data' / 'tools'
     data_home = os.environ.get('XDG_DATA_HOME')
     base = Path(data_home).expanduser() if data_home else Path.home() / '.local' / 'share'
     return base / 'uv' / 'tools'

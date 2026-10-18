@@ -7,6 +7,7 @@ index install, and a local checkout.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -19,20 +20,16 @@ from pyselfupdate.install import requirement_for
 from pyselfupdate.install import tool_dir
 
 
-def test_tool_dir_prefers_the_explicit_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv('UV_TOOL_DIR', str(tmp_path / 'explicit'))
-    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'data'))
-    assert tool_dir() == tmp_path / 'explicit'
-
-
-def test_tool_dir_falls_back_to_xdg_then_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.delenv('UV_TOOL_DIR', raising=False)
-    monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'data'))
-    assert tool_dir() == tmp_path / 'data' / 'uv' / 'tools'
-
-    monkeypatch.delenv('XDG_DATA_HOME', raising=False)
-    monkeypatch.setattr(Path, 'home', classmethod(lambda cls: tmp_path / 'home'))
-    assert tool_dir() == tmp_path / 'home' / '.local' / 'share' / 'uv' / 'tools'
+@pytest.mark.parametrize('variables', [('UV_TOOL_DIR', 'XDG_DATA_HOME'), ('XDG_DATA_HOME',), ()])
+def test_tool_dir_is_where_uv_puts_tools(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, variables: tuple[str, ...]) -> None:
+    """Asked of uv itself, so every platform CI runs on checks its own default."""
+    for name in ('UV_TOOL_DIR', 'XDG_DATA_HOME'):
+        if name in variables:
+            monkeypatch.setenv(name, str(tmp_path / name.lower()))
+        else:
+            monkeypatch.delenv(name, raising=False)
+    printed = subprocess.run(['uv', 'tool', 'dir'], capture_output=True, text=True, check=True).stdout.strip()
+    assert tool_dir() == Path(printed)
 
 
 def test_reads_a_pinned_git_install(make_receipt) -> None:
