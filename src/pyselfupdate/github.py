@@ -191,6 +191,10 @@ class GitHubSource:
     # None means "not yet asked", which an empty string cannot say.
     _resolved_token: str | None = field(default=None, init=False, repr=False, compare=False)
 
+    # Whether this stream's tags carry a `v` after the prefix, as the latest
+    # release this source read spells it. None until a release is read.
+    _tags_carry_v: bool | None = field(default=None, init=False, repr=False, compare=False)
+
     def _credential(self) -> str:
         if self._resolved_token is None:
             self._resolved_token = self.token or token_from_env() or (self.token_func() if self.token_func else '') or token_from_command()
@@ -204,16 +208,18 @@ class GitHubSource:
     def changelog(self, from_ref: str, to_ref: str) -> list[str]:
         """Commit subjects between two releases, newest last.
 
-        The refs arrive as `Release.tag` reports them, with `tag_prefix`
-        stripped. GitHub compares git refs, and the tags the repository holds
-        carry the prefix, so it is put back before the request.
+        The refs arrive as `check` reports versions: a leading `v`, and no
+        `tag_prefix`. GitHub compares git refs, so each is spelled as the
+        repository spells its tags. The prefix goes back on, and the `v` comes
+        off where the latest release this source read has none.
 
         Returns an empty list rather than raising: a missing changelog is not a
         reason to fail an update that already succeeded.
         """
         if not from_ref or not to_ref or from_ref == to_ref:
             return []
-        base, head = (_quote(f'{self.tag_prefix}{ref}') for ref in (from_ref, to_ref))
+        refs = (from_ref, to_ref) if self._tags_carry_v is not False else (from_ref.removeprefix('v'), to_ref.removeprefix('v'))
+        base, head = (_quote(f'{self.tag_prefix}{ref}') for ref in refs)
         path = f'/repos/{self.owner}/{self.repo}/compare/{base}...{head}'
         try:
             payload = self._get(path)
@@ -258,8 +264,10 @@ class GitHubSource:
         raise NoReleaseError(f'{self.owner}/{self.repo} publishes no release{wanted}')
 
     def _release(self, payload: dict, tag: str) -> Release:
+        version = tag.removeprefix(self.tag_prefix)
+        self._tags_carry_v = version.startswith('v')
         return Release(
-            tag=tag.removeprefix(self.tag_prefix),
+            tag=version,
             ref=tag,
             url=payload.get('html_url') or '',
             notes=payload.get('body') or '',

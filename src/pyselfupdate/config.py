@@ -60,6 +60,11 @@ class Config:
 
     metadata: dict[str, str] = field(default_factory=dict)
 
+    # The default source, kept while the fields it is built from are unchanged.
+    # A check and the changelog after it then share one source, which resolves
+    # the token once and spells the changelog's refs as the release it read.
+    _github: GitHubSource | None = field(default=None, init=False, repr=False, compare=False)
+
     def require_source(self) -> Source:
         """The resolved source.
 
@@ -84,7 +89,7 @@ class Config:
         if source is None:
             if not owner:
                 raise InvalidConfigError('owner is required without a custom source')
-            source = GitHubSource(
+            built = GitHubSource(
                 owner=owner,
                 repo=repo,
                 token=self.token,
@@ -93,6 +98,9 @@ class Config:
                 allow_prerelease=self.allow_prerelease,
                 tag_prefix=self.tag_prefix,
             )
+            if built != self._github:
+                self._github = built
+            source = self._github
 
         package = self.package or self.tool
         return Config(

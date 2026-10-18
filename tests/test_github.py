@@ -20,6 +20,8 @@ from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.errors import SourceError
 from pyselfupdate.github import GitHubSource
 from pyselfupdate.github import token_from_env
+from pyselfupdate.updater import changelog
+from pyselfupdate.updater import check
 
 
 class Recorder:
@@ -251,11 +253,17 @@ def test_no_matching_prefix_is_no_release(server: Recorder) -> None:
 
 
 @pytest.mark.parametrize(
-    ('tag_prefix', 'compared'),
-    [('', 'v1.0.0...v1.1.0'), ('cli/', 'cli%2Fv1.0.0...cli%2Fv1.1.0')],
+    ('tag_prefix', 'latest_tag', 'compared'),
+    [
+        ('', 'v1.1.0', 'v1.0.0...v1.1.0'),
+        ('cli/', 'cli/v1.1.0', 'cli%2Fv1.0.0...cli%2Fv1.1.0'),
+        ('', '1.1.0', '1.0.0...1.1.0'),
+    ],
 )
-def test_changelog_returns_commit_subjects(server: Recorder, tag_prefix: str, compared: str) -> None:
-    """A prefixed stream compares the tags the repository holds, not the versions it reports."""
+def test_changelog_compares_the_tags_the_repository_holds(server: Recorder, tag_prefix: str, latest_tag: str, compared: str) -> None:
+    """`check` reports versions with a `v` and no prefix, and a stream's tags may differ in both."""
+    server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': latest_tag})
+    server.routes['/repos/datapointchris/demo/releases?per_page=100'] = (200, [{'tag_name': latest_tag}])
     server.routes[f'/repos/datapointchris/demo/compare/{compared}'] = (
         200,
         {
@@ -266,7 +274,11 @@ def test_changelog_returns_commit_subjects(server: Recorder, tag_prefix: str, co
         },
     )
 
-    assert source(tag_prefix=tag_prefix).changelog('v1.0.0', 'v1.1.0') == ['feat: add a thing', 'fix: correct the thing']
+    config = Config(tool='demo', owner='datapointchris', version='1.0.0', timeout=5, tag_prefix=tag_prefix)
+
+    result = check(config)
+
+    assert changelog(config, result.current, result.latest) == ['feat: add a thing', 'fix: correct the thing']
 
 
 def test_changelog_swallows_failures(server: Recorder) -> None:
