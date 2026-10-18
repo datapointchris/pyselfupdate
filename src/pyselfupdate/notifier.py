@@ -98,9 +98,10 @@ def notify(
 def enabled(config: Config, *, interactive: bool | None = None) -> tuple[bool, Skip | None]:
     """Whether a check would run, without touching the network or the clock.
 
-    Backs a fleet dashboard and a `<tool> update --why`. The interval is
-    deliberately not consulted: this answers "is this tool opted in", not "is it
-    due".
+    For a caller that reports why a tool does or does not check, such as a
+    dashboard listing installed tools or a `<tool> update --why`. The interval
+    is deliberately not consulted: this answers "is this tool opted in", not "is
+    it due".
     """
     if _disabled_by_env(config.tool):
         return False, Skip.DISABLED
@@ -123,9 +124,9 @@ def _asking_for_help() -> bool:
     screen. Nothing a notice is for happens on a help screen, and the check
     costs a releases-API call and a state write every time.
 
-    It lands hardest on a reader that walks a tool's help. Measured 2026-08-22:
-    reading doit's twenty commands meant twenty-one invocations, each one
-    reaching this.
+    It lands hardest on a reader that walks a tool's help. Reading every
+    command's help is one invocation per command plus one for the root, and
+    each of them reaches this.
 
     A `--` ends the scan, because everything after it is the command's own
     argument. Skipping when it should not have costs a missed notice, which is

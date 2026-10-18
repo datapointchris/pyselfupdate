@@ -88,10 +88,9 @@ DEFAULT_TOKEN_COMMAND = 'gh auth token'  # nosec B105
 
 Authenticating is the default because the alternative is not "no credential" but
 "sixty requests an hour, charged per IP address and shared by every host behind
-one egress". Measured 2026-08-21 across one household: two machines checking on a
-timer held that pool at zero for whole hours, and every tool on the network that
-asked anonymously was refused. A default that has to be opted into is a default
-nobody sets, and eleven of fourteen tools here had not.
+one egress". Two machines checking on a timer can hold that pool at zero for
+whole hours, and every tool behind the same address that asks anonymously is
+then refused. A default that has to be opted into is a default nobody sets.
 """
 
 
