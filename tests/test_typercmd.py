@@ -83,7 +83,7 @@ def config(source: StubSource, version: str = '1.0.0') -> Config:
 
 
 def test_the_changelog_is_fetched_before_the_install(pinned, installs, exits, events) -> None:
-    """The failure this ordering exists for: syncer 4.0.0 fetched it after."""
+    """A changelog fetched after the install can need a module the install deleted."""
     source = RecordingSource(events, subjects=['feat: one'])
 
     run_update(config(source))

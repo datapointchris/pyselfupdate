@@ -33,13 +33,13 @@ def test_tool_dir_is_where_uv_puts_tools(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
 
 def test_reads_a_pinned_git_install(make_receipt) -> None:
-    make_receipt('syncer', '{ name = "syncer", git = "https://github.com/datapointchris/syncer.git?rev=v4.0.0" }')
+    make_receipt('mytool', '{ name = "mytool", git = "https://github.com/x/mytool.git?rev=v4.0.0" }')
 
-    installation = read_installation('syncer')
+    installation = read_installation('mytool')
     assert installation == Installation(
-        tool='syncer',
+        tool='mytool',
         kind=InstallKind.GIT,
-        url='https://github.com/datapointchris/syncer.git',
+        url='https://github.com/x/mytool.git',
         revision='v4.0.0',
     )
 
@@ -68,8 +68,8 @@ def test_reads_the_tools_extras_and_rebuilds_what_was_installed_beside_it(make_r
     """Every shape a `--with` or `--with-editable` writes into a receipt, as a line uv reads back."""
     local, editable = tmp_path / 'localwith', tmp_path / 'editwith'
     make_receipt(
-        'syncer',
-        '{ name = "syncer", extras = ["fast"], git = "https://github.com/x/syncer.git?rev=v4.0.0" }, '
+        'mytool',
+        '{ name = "mytool", extras = ["fast"], git = "https://github.com/x/mytool.git?rev=v4.0.0" }, '
         """{ name = "withdemo", marker = "python_full_version >= '3.11'", specifier = ">=1" }, """
         '{ name = "gitwith", git = "https://github.com/x/gitwith.git?rev=v1.0.0" }, '
         '{ name = "subwith", git = "https://github.com/x/mono.git?subdirectory=pkg&tag=v2" }, '
@@ -78,7 +78,7 @@ def test_reads_the_tools_extras_and_rebuilds_what_was_installed_beside_it(make_r
         f'{{ name = "editwith", editable = "{editable.as_posix()}" }}',
     )
 
-    installation = read_installation('syncer')
+    installation = read_installation('mytool')
 
     assert installation.extras == ('fast',)
     assert installation.with_requirements == (
@@ -94,19 +94,19 @@ def test_reads_the_tools_extras_and_rebuilds_what_was_installed_beside_it(make_r
 def test_a_requirement_no_line_can_reproduce_does_not_fail_the_read(make_receipt) -> None:
     """A raise here would make the notify gate treat the tool as a local install and print no notice."""
     make_receipt(
-        'syncer',
-        '{ name = "syncer", git = "https://github.com/x/syncer.git?rev=v4.0.0" }, { name = "plugin", virtual = "/src/plugin" }',
+        'mytool',
+        '{ name = "mytool", git = "https://github.com/x/mytool.git?rev=v4.0.0" }, { name = "plugin", virtual = "/src/plugin" }',
     )
 
-    installation = read_installation('syncer')
+    installation = read_installation('mytool')
 
     assert installation.kind is InstallKind.GIT
     assert installation.with_requirements == ()
 
 
 def test_requirement_for_carries_the_tools_extras() -> None:
-    installation = Installation('syncer', InstallKind.GIT, url='https://github.com/x/syncer.git', revision='v1.0.0', extras=('fast', 'tui'))
-    assert requirement_for(installation, 'v2.0.0') == 'syncer[fast,tui] @ git+https://github.com/x/syncer.git@v2.0.0'
+    installation = Installation('mytool', InstallKind.GIT, url='https://github.com/x/mytool.git', revision='v1.0.0', extras=('fast', 'tui'))
+    assert requirement_for(installation, 'v2.0.0') == 'mytool[fast,tui] @ git+https://github.com/x/mytool.git@v2.0.0'
 
 
 @pytest.mark.parametrize('key', ['directory', 'path', 'editable'])
@@ -123,30 +123,30 @@ def test_a_missing_receipt_is_not_installed(uv_tools: Path) -> None:
 
 
 def test_a_receipt_for_a_different_package_is_not_installed(make_receipt) -> None:
-    make_receipt('syncer', '{ name = "something-else" }')
+    make_receipt('mytool', '{ name = "something-else" }')
 
     with pytest.raises(NotInstalledError):
-        read_installation('syncer')
+        read_installation('mytool')
 
 
 def test_a_corrupt_receipt_is_not_installed(uv_tools: Path) -> None:
-    directory = uv_tools / 'syncer'
+    directory = uv_tools / 'mytool'
     directory.mkdir()
     (directory / 'uv-receipt.toml').write_text('this is not toml [[[', encoding='utf-8')
 
     with pytest.raises(NotInstalledError):
-        read_installation('syncer')
+        read_installation('mytool')
 
 
 def test_requirement_for_a_git_install_pins_the_ref() -> None:
-    installation = Installation('syncer', InstallKind.GIT, url='https://github.com/x/syncer.git', revision='v1.0.0')
-    assert requirement_for(installation, 'v2.0.0') == 'syncer @ git+https://github.com/x/syncer.git@v2.0.0'
+    installation = Installation('mytool', InstallKind.GIT, url='https://github.com/x/mytool.git', revision='v1.0.0')
+    assert requirement_for(installation, 'v2.0.0') == 'mytool @ git+https://github.com/x/mytool.git@v2.0.0'
 
 
 def test_requirement_for_a_git_install_keeps_a_prefixed_tag_intact() -> None:
     """A nested module's tag is `cli/v1.2.0` and git needs it spelled exactly."""
-    installation = Installation('icb', InstallKind.GIT, url='https://github.com/x/ichrisbirch.git', revision='cli/v0.3.0')
-    assert requirement_for(installation, 'cli/v0.3.3') == 'icb @ git+https://github.com/x/ichrisbirch.git@cli/v0.3.3'
+    installation = Installation('democli', InstallKind.GIT, url='https://github.com/x/monorepo.git', revision='cli/v0.3.0')
+    assert requirement_for(installation, 'cli/v0.3.3') == 'democli @ git+https://github.com/x/monorepo.git@cli/v0.3.3'
 
 
 def test_requirement_for_an_index_install_uses_a_version_specifier() -> None:
