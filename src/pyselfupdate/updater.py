@@ -103,7 +103,7 @@ def installed_from_release(installation: Installation, tag_prefix: str) -> bool:
 
     A build from a branch reports a version that ranks wrongly against a
     release. Versioned from git tags, a branch three commits past v1.2.3 builds
-    as `1.2.3-post.3+g<sha>`, a semver pre-release that ranks below the v1.2.3
+    as `1.2.3-post.3+<sha>`, a semver pre-release that ranks below the v1.2.3
     it is ahead of.
     """
     if installation.kind is InstallKind.INDEX:

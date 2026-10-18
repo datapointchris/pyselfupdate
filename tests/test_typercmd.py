@@ -140,7 +140,7 @@ def test_an_install_update_refuses_is_refused_before_any_request(
     source = RecordingSource([])
 
     with pytest.raises(typer.Exit) as raised:
-        run_update(config(source, version='2.0.0-post.3+g1a2b3c4'), check_only=check_only)
+        run_update(config(source, version='2.0.0-post.3+1a2b3c4'), check_only=check_only)
 
     assert raised.value.exit_code == 1
     assert source.calls == 0

@@ -115,7 +115,7 @@ only the value tells them apart. `updater.installed_from_release` is the one
 copy of that rule. `update`, `update --check` and the notify gate all reach it.
 
 A version check cannot stand in for the receipt. A branch build versioned from
-git tags reports `1.2.3-post.3+g<sha>`. That is valid semver, and it ranks below
+git tags reports `1.2.3-post.3+<sha>`. That is valid semver, and it ranks below
 the `v1.2.3` it is ahead of. Comparing it offers the older release as an update.
 
 Failing closed matters here: a tool that cannot be identified is treated as

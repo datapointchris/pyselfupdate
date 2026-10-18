@@ -237,7 +237,7 @@ def test_update_refuses_a_branch_tracking_install(make_receipt, installs: list[s
     make_receipt('demo', f'{{ name = "demo", git = "{git}" }}')
 
     with pytest.raises(LocalInstallError, match=f'installed from {tracked} rather than a release tag'):
-        update(config(StubSource(tag='v1.0.0'), version='1.0.0-post.3+g1a2b3c4'))
+        update(config(StubSource(tag='v1.0.0'), version='1.0.0-post.3+1a2b3c4'))
     assert not installs
 
 
