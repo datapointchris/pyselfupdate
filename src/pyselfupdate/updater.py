@@ -58,7 +58,12 @@ class Result:
 
 
 def check(config: Config) -> Result:
-    """Report whether a newer release exists, without installing anything."""
+    """Report whether a newer release exists, without installing anything.
+
+    Compares versions and reads nothing else. A branch build's version can rank
+    below the release it is ahead of, so a caller reporting the result runs
+    `require_updatable` first, as `update` and `typercmd.run_update` do.
+    """
     resolved = config.resolved()
     current = _current_version(resolved)
 
@@ -81,9 +86,32 @@ def require_updatable(config: Config) -> Installation:
     `typercmd.run_update` does, to fetch a changelog while the environment is
     still intact -- keeps the refusal ahead of the network by starting here.
     """
-    installation = read_installation(config.resolved().tool)
-    _require_updatable(installation)
+    resolved = config.resolved()
+    installation = read_installation(resolved.tool)
+    _require_updatable(installation, resolved.tag_prefix)
     return installation
+
+
+def installed_from_release(installation: Installation, tag_prefix: str) -> bool:
+    """Whether the running build is a release, so its version can be compared with the latest one.
+
+    An index install is. A git install is when its revision is a release tag:
+    `tag_prefix` followed by a semantic version, the form a release's
+    `install_ref` takes. uv writes `?rev=` for whatever followed the `@`.
+    `@main` and `@v1.2.3` land in the same field, so only the value tells a
+    branch from a tag.
+
+    A build from a branch reports a version that ranks wrongly against a
+    release. Versioned from git tags, a branch three commits past v1.2.3 builds
+    as `1.2.3-post.3+g<sha>`, a semver pre-release that ranks below the v1.2.3
+    it is ahead of.
+    """
+    if installation.kind is InstallKind.INDEX:
+        return True
+    if installation.kind is not InstallKind.GIT:
+        return False
+    revision = installation.revision
+    return revision.startswith(tag_prefix) and semver.is_valid(revision[len(tag_prefix) :])
 
 
 def install_release(config: Config, result: Result, installation: Installation, *, quiet: bool = True) -> Result:
@@ -156,12 +184,12 @@ def changelog(config: Config, from_version: str, to_version: str) -> list[str]:
 
 
 def _current_version(config: Config) -> str:
-    """The running version, canonicalized, rejecting one that is not a release.
+    """The running version, canonicalized, rejecting one that is not a semantic version.
 
-    An install that tracks a git branch rather than a tag reports whatever
-    version was in pyproject.toml when it was built, which says nothing about
-    how far behind the checkout is. Comparing it against a tag would claim an
-    update is available on every run, or none ever.
+    An empty version, from a distribution that is not installed, fails here, and
+    so does a PEP 440 form such as `1.2.3.post3.dev0`. A branch build's version
+    usually parses, so `installed_from_release` refuses a branch install from
+    the receipt instead.
     """
     canonical = semver.canonical(config.version)
     if not semver.is_valid(canonical):
@@ -169,14 +197,14 @@ def _current_version(config: Config) -> str:
     return canonical
 
 
-def _require_updatable(installation: Installation) -> None:
+def _require_updatable(installation: Installation, tag_prefix: str) -> None:
     if installation.kind is InstallKind.LOCAL:
         raise LocalInstallError(
             f'{installation.tool} is installed from {installation.url}; update the checkout instead of reinstalling over it'
         )
-    if installation.kind is InstallKind.GIT and not installation.revision:
+    if not installed_from_release(installation, tag_prefix):
         raise LocalInstallError(
-            f'{installation.tool} is installed from a branch rather than a tag, '
+            f'{installation.tool} is installed from {installation.revision or "its default branch"} rather than a release tag, '
             f'so a release version cannot be compared against it; '
             f'reinstall from a tagged release to enable updates'
         )

@@ -125,17 +125,27 @@ def test_check_only_reports_without_installing(pinned, installs, exits, capsys) 
     assert '  • feat: one' in output
 
 
-def test_a_local_install_is_refused_before_any_request(make_receipt, installs, exits, capsys) -> None:
-    make_receipt('demo', '{ name = "demo", editable = "/Users/chris/tools/demo" }')
+@pytest.mark.parametrize(
+    ('requirement', 'check_only', 'reason'),
+    [
+        ('editable = "/src/demo"', False, 'update the checkout'),
+        ('git = "https://github.com/x/demo.git"', True, 'installed from its default branch rather than a release tag'),
+    ],
+)
+def test_an_install_update_refuses_is_refused_before_any_request(
+    make_receipt, installs, exits, capsys, requirement: str, check_only: bool, reason: str
+) -> None:
+    """`--check` refuses what an update refuses, rather than comparing a version that names no release."""
+    make_receipt('demo', f'{{ name = "demo", {requirement} }}')
     source = RecordingSource([])
 
     with pytest.raises(typer.Exit) as raised:
-        run_update(config(source))
+        run_update(config(source, version='2.0.0-post.3+g1a2b3c4'), check_only=check_only)
 
     assert raised.value.exit_code == 1
     assert source.calls == 0
     assert not installs
-    assert 'update the checkout' in capsys.readouterr().err
+    assert reason in capsys.readouterr().err
 
 
 def test_an_install_failure_exits_non_zero(pinned, exits, capsys, monkeypatch: pytest.MonkeyPatch) -> None:

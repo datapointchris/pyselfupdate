@@ -22,9 +22,9 @@ from typing import TextIO
 from pyselfupdate import state as state_module
 from pyselfupdate.config import Config
 from pyselfupdate.errors import SelfUpdateError
-from pyselfupdate.install import InstallKind
 from pyselfupdate.install import read_installation
 from pyselfupdate.updater import check
+from pyselfupdate.updater import installed_from_release
 
 DEFAULT_INTERVAL = dt.timedelta(hours=24)
 
@@ -109,7 +109,7 @@ def enabled(config: Config, *, interactive: bool | None = None) -> tuple[bool, S
         return False, Skip.NOT_A_TTY
     if _in_ci():
         return False, Skip.CI
-    if _is_local_install(config.tool):
+    if _is_local_install(config):
         return False, Skip.LOCAL_INSTALL
     return True, None
 
@@ -232,20 +232,19 @@ def is_interactive(streams: Iterable[Any] | None = None) -> bool:
     return True
 
 
-def _is_local_install(tool: str) -> bool:
+def _is_local_install(config: Config) -> bool:
     """A local, editable, or branch-tracking install must never be nagged.
 
     Failing closed: anything that cannot be positively identified as a pinned
     release install is treated as local, because a false negative here prints a
-    wrong notice on every command in a dev checkout.
+    wrong notice on every command in a dev checkout. `update` refuses the same
+    installs, through the same `installed_from_release`.
     """
     try:
-        installation = read_installation(tool)
+        installation = read_installation(config.tool)
     except SelfUpdateError:
         return True
-    if installation.kind is InstallKind.LOCAL:
-        return True
-    return installation.kind is InstallKind.GIT and not installation.revision
+    return not installed_from_release(installation, config.tag_prefix)
 
 
 def _interval(tool: str, override: dt.timedelta | None) -> dt.timedelta:

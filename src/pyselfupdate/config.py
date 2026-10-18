@@ -51,7 +51,8 @@ class Config:
 
     # Selects one release stream in a repository publishing several, as in
     # "cli/" for tags of the form cli/v1.2.3. Configures the default GitHub
-    # source and is unused when `source` is supplied.
+    # source. Whatever the source, a git install whose receipt `rev` is not
+    # this prefix followed by a semantic version is refused as a branch install.
     tag_prefix: str = ''
 
     # Locates releases. Defaults to a GitHubSource built from the fields above.

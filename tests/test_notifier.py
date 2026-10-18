@@ -173,9 +173,10 @@ def test_a_local_install_is_never_notified(make_receipt, state_home: Path, out) 
     assert source.calls == 0
 
 
-def test_a_branch_tracking_install_is_never_notified(make_receipt, state_home: Path, out) -> None:
+@pytest.mark.parametrize('git', ['https://github.com/x/demo.git', 'https://github.com/x/demo.git?rev=main'])
+def test_a_branch_tracking_install_is_never_notified(make_receipt, state_home: Path, out, git: str) -> None:
     """Its version says nothing about how far behind the checkout is."""
-    make_receipt('demo', '{ name = "demo", git = "https://github.com/x/demo.git" }')
+    make_receipt('demo', f'{{ name = "demo", git = "{git}" }}')
     source = StubSource(tag='v2.0.0')
 
     assert notify(config(source), defer=False, interactive=True, out=out).skip is Skip.LOCAL_INSTALL

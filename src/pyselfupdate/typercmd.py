@@ -25,7 +25,6 @@ import typer
 
 from pyselfupdate.config import Config
 from pyselfupdate.errors import SelfUpdateError
-from pyselfupdate.install import Installation
 from pyselfupdate.install import exit_now
 from pyselfupdate.updater import changelog
 from pyselfupdate.updater import check
@@ -52,6 +51,11 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
     output format is identical to goselfupdate's, because a fleet that reports
     the same thing three different ways is a fleet you have to read carefully.
 
+    `check_only` reads the receipt first, as an update does, and refuses the
+    same installs. A branch build's version can rank below the release it is
+    ahead of, so a check that skipped the receipt would offer that older
+    release as an update.
+
     The step order is the load-bearing part. Everything that reaches the network
     or imports a module happens before the install; after it, this process only
     prints what it already holds and exits without unwinding. Both halves of
@@ -61,10 +65,8 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
     on, and so had just deleted.
     """
     tool = config.tool
-    installation: Installation | None = None
     try:
-        if not check_only:
-            installation = require_updatable(config)
+        installation = require_updatable(config)
         result = check(config)
     except SelfUpdateError as error:
         typer.echo(f'✗ {tool} update failed: {error}', err=True)
@@ -76,7 +78,7 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
 
     subjects = [] if skip_changelog else changelog(config, result.current, result.latest)
 
-    if installation is None:
+    if check_only:
         typer.echo(f'✓ {tool} update available: {result.current} → {result.latest}')
         _echo_changes(subjects)
         return

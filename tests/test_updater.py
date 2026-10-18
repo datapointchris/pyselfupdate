@@ -129,13 +129,13 @@ def test_update_installs_the_pinned_tag(pinned, installs: list[str]) -> None:
 
 
 def test_update_preserves_a_prefixed_tag(make_receipt, installs: list[str], lock: StubLock) -> None:
-    make_receipt('icb', '{ name = "icb", git = "https://github.com/x/ichrisbirch.git?rev=cli/v0.3.0" }')
+    make_receipt('democli', '{ name = "democli", git = "https://github.com/x/monorepo.git?rev=cli/v0.3.0" }')
     source = StubSource(tag='v0.3.3', ref='cli/v0.3.3')
 
-    update(Config(tool='icb', owner='x', version='0.3.0', source=source))
+    update(Config(tool='democli', owner='x', version='0.3.0', source=source, tag_prefix='cli/'))
 
-    assert installs == ['icb @ git+https://github.com/x/ichrisbirch.git@cli/v0.3.3']
-    assert lock.reads == [('https://github.com/x/ichrisbirch.git', 'cli/v0.3.3', ())]
+    assert installs == ['democli @ git+https://github.com/x/monorepo.git@cli/v0.3.3']
+    assert lock.reads == [('https://github.com/x/monorepo.git', 'cli/v0.3.3', ())]
 
 
 def test_an_update_keeps_the_tools_extras_and_what_was_installed_beside_it(
@@ -224,12 +224,20 @@ def test_update_refuses_a_local_install(make_receipt, installs: list[str]) -> No
     assert not installs
 
 
-def test_update_refuses_a_branch_tracking_install(make_receipt, installs: list[str]) -> None:
-    """relate and indy look like this today, which is why the message says so."""
-    make_receipt('demo', '{ name = "demo", git = "https://github.com/x/demo.git" }')
+@pytest.mark.parametrize(
+    ('git', 'tracked'),
+    [
+        ('https://github.com/x/demo.git', 'its default branch'),
+        # uv writes `@main` as `rev=main`, the field `@v1.0.0` fills.
+        ('https://github.com/x/demo.git?rev=main', 'main'),
+    ],
+)
+def test_update_refuses_a_branch_tracking_install(make_receipt, installs: list[str], git: str, tracked: str) -> None:
+    """A branch ahead of v1.0.0 builds as 1.0.0-post.3, which ranks below the release it would be replaced by."""
+    make_receipt('demo', f'{{ name = "demo", git = "{git}" }}')
 
-    with pytest.raises(LocalInstallError, match='installed from a branch'):
-        update(config(StubSource(tag='v2.0.0')))
+    with pytest.raises(LocalInstallError, match=f'installed from {tracked} rather than a release tag'):
+        update(config(StubSource(tag='v1.0.0'), version='1.0.0-post.3+g1a2b3c4'))
     assert not installs
 
 
