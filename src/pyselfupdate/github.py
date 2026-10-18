@@ -203,14 +203,19 @@ class GitHubSource:
         return self._latest_from_endpoint()
 
     def changelog(self, from_ref: str, to_ref: str) -> list[str]:
-        """Commit subjects between two tags, newest last.
+        """Commit subjects between two releases, newest last.
+
+        The refs arrive as `Release.tag` reports them, with `tag_prefix`
+        stripped. GitHub compares git refs, and the tags the repository holds
+        carry the prefix, so it is put back before the request.
 
         Returns an empty list rather than raising: a missing changelog is not a
         reason to fail an update that already succeeded.
         """
         if not from_ref or not to_ref or from_ref == to_ref:
             return []
-        path = f'/repos/{self.owner}/{self.repo}/compare/{_quote(from_ref)}...{_quote(to_ref)}'
+        base, head = (_quote(f'{self.tag_prefix}{ref}') for ref in (from_ref, to_ref))
+        path = f'/repos/{self.owner}/{self.repo}/compare/{base}...{head}'
         try:
             payload = self._get(path)
         except SelfUpdateError:

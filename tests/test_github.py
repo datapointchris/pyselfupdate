@@ -250,8 +250,13 @@ def test_no_matching_prefix_is_no_release(server: Recorder) -> None:
         source(tag_prefix='cli/').latest_release()
 
 
-def test_changelog_returns_commit_subjects(server: Recorder) -> None:
-    server.routes['/repos/datapointchris/demo/compare/v1.0.0...v1.1.0'] = (
+@pytest.mark.parametrize(
+    ('tag_prefix', 'compared'),
+    [('', 'v1.0.0...v1.1.0'), ('cli/', 'cli%2Fv1.0.0...cli%2Fv1.1.0')],
+)
+def test_changelog_returns_commit_subjects(server: Recorder, tag_prefix: str, compared: str) -> None:
+    """A prefixed stream compares the tags the repository holds, not the versions it reports."""
+    server.routes[f'/repos/datapointchris/demo/compare/{compared}'] = (
         200,
         {
             'commits': [
@@ -261,7 +266,7 @@ def test_changelog_returns_commit_subjects(server: Recorder) -> None:
         },
     )
 
-    assert source().changelog('v1.0.0', 'v1.1.0') == ['feat: add a thing', 'fix: correct the thing']
+    assert source(tag_prefix=tag_prefix).changelog('v1.0.0', 'v1.1.0') == ['feat: add a thing', 'fix: correct the thing']
 
 
 def test_changelog_swallows_failures(server: Recorder) -> None:
