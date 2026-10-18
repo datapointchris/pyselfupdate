@@ -83,9 +83,6 @@ class Installation:
     # raises NotInstalledError on them instead of dropping them.
     _unrebuildable: tuple[str, ...] = field(default=(), repr=False)
 
-    def is_updatable(self) -> bool:
-        return self.kind is not InstallKind.LOCAL
-
 
 def tool_dir() -> Path:
     """uv's tool directory.

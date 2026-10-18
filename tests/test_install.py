@@ -45,7 +45,6 @@ def test_reads_a_pinned_git_install(make_receipt) -> None:
         url='https://github.com/datapointchris/syncer.git',
         revision='v4.0.0',
     )
-    assert installation.is_updatable()
 
 
 def test_reads_a_branch_tracking_git_install(make_receipt) -> None:
@@ -67,7 +66,6 @@ def test_reads_an_index_install(make_receipt) -> None:
 
     installation = read_installation('codespell')
     assert installation.kind is InstallKind.INDEX
-    assert installation.is_updatable()
 
 
 def test_reads_the_tools_extras_and_rebuilds_what_was_installed_beside_it(make_receipt, tmp_path: Path) -> None:
@@ -121,7 +119,6 @@ def test_reads_a_local_install_however_uv_spelled_it(make_receipt, key: str) -> 
 
     installation = read_installation('dectl')
     assert installation.kind is InstallKind.LOCAL
-    assert not installation.is_updatable()
 
 
 def test_a_missing_receipt_is_not_installed(uv_tools: Path) -> None:
