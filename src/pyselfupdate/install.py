@@ -64,9 +64,10 @@ class Installation:
     kind: InstallKind
     url: str = ''
 
-    # The requested revision, empty when the install tracks the default branch.
-    # An empty value on a GIT install is the interesting case: the tool was
-    # installed from a moving target, so "up to date" has no meaning.
+    # Whatever followed the `@` at install time: a tag, a branch or a commit,
+    # which uv records alike as `rev=`. Empty when the install follows the
+    # default branch. `updater.installed_from_release` reads it as a release
+    # tag or refuses it.
     revision: str = ''
 
     extras: tuple[str, ...] = ()
@@ -154,8 +155,9 @@ def read_installation(tool: str) -> Installation:
 def _split_git(git: str) -> tuple[str, dict[str, str], str]:
     """A receipt's git source as its URL, its query and the commit after `#`.
 
-    uv writes `...git?rev=v1.2.3` for a pinned install and omits the query
-    entirely for one that follows the default branch.
+    uv writes `...git?rev=v1.2.3` for `@v1.2.3`, `...git?rev=main` for
+    `@main`, and omits the query entirely for an install that follows the
+    default branch.
     """
     rest, _, commit = git.partition('#')
     url, _, query = rest.partition('?')

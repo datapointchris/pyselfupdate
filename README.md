@@ -71,7 +71,7 @@ Nothing is printed when any of these hold:
 | `NO_AUTO_UPDATE` or `MYTOOL_NO_AUTO_UPDATE` is set | Opted out |
 | `CI`, `BUILD_NUMBER`, `RUN_ID`, `GITHUB_ACTIONS`, `CODESPACES` | Not a human |
 | stdout or stderr is not a terminal | `mytool list > out 2>&1` must stay clean |
-| Installed from a local path, an editable checkout, or a branch | Nothing to compare against |
+| Installed from a local path, an editable checkout, a branch or a commit | Nothing to compare against |
 | Checked within the interval | One request per day, not per invocation |
 
 Presence-only, any value: `NO_AUTO_UPDATE=0` disables it, the same way
@@ -90,6 +90,13 @@ if result.update_available:
 result = update(config)  # installs, raises on failure
 ```
 
+`check` compares versions and reads nothing else. A branch build's version can
+rank below the release it is ahead of. Three commits past `v1.2.3`, a tool
+versioned from git tags builds as `1.2.3-post.3`, which semver ranks below
+`v1.2.3`. Call `require_updatable` before reporting what `check` found. It
+reads uv's receipt and refuses every install `update` refuses, as
+[What will not be updated](#what-will-not-be-updated) lists.
+
 Or take the whole command:
 
 ```python
@@ -97,6 +104,9 @@ from pyselfupdate.typercmd import add_update_command
 
 add_update_command(app, CONFIG)  # gives you `mytool update [--check]`
 ```
+
+`mytool update --check` reads the receipt first, as `update` does. On an
+install `update` refuses, it prints the same refusal and exits 1.
 
 `update` runs `uv tool install --force`, which **rebuilds the virtual
 environment the running interpreter lives in**. Unlike replacing a Unix binary
@@ -153,11 +163,20 @@ runtime:
 | --- | --- |
 | `git = "...git?rev=v1.2.3"` | Updatable |
 | `name = "mytool"` (from an index) | Updatable |
-| `git = "...git"` with no `rev` | Refused — tracks a branch, so its version says nothing about how far behind it is |
+| `git = "...git"` with no `rev` | Refused — tracks the default branch, so its version says nothing about how far behind it is |
+| `git = "...git?rev=main"`, or a `rev` naming a commit | Refused — uv writes `rev=` for whatever followed the `@`, so a `rev` counts as a release only when it is `tag_prefix` followed by a semantic version |
 | `directory` / `path` / `editable` | Refused — reinstalling would discard a working copy |
 | A `--with` requirement no requirements-file line reproduces, such as a relative path | Refused with `NotInstalledError` — the update would drop it |
 
 A tool that cannot be identified at all is treated as local and left alone.
+
+`update` and `mytool update --check` refuse every row marked Refused. The
+notice stays silent on each of them except the `--with` row, because a newer
+release is still worth knowing about there.
+
+A caller with a custom `source` whose refs carry a prefix sets `tag_prefix` to
+match. Without it, a tag install from that source is refused as a branch
+install.
 
 ## Configuration
 

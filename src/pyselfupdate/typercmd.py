@@ -48,8 +48,8 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
 
     Split out from the command so a CLI that wants its own flags, or that nests
     the command under a group, does not have to reimplement the reporting. The
-    output format is identical to goselfupdate's, because a fleet that reports
-    the same thing three different ways is a fleet you have to read carefully.
+    output format is identical to goselfupdate's, so tools built on either
+    library report an update in the same words.
 
     `check_only` reads the receipt first, as an update does, and refuses the
     same installs. A branch build's version can rank below the release it is

@@ -15,11 +15,13 @@ class InvalidConfigError(SelfUpdateError):
 
 
 class LocalInstallError(SelfUpdateError):
-    """The tool was installed from a local path or as an editable checkout.
+    """The running build is not a release, so no release can be compared against it.
 
-    Reinstalling would discard a working copy for a release that may be older,
-    with no way to tell which is newer. This is the analog of goselfupdate's
-    ErrDevBuild.
+    Raised for an install from a local path or an editable checkout, for a git
+    install from a branch or a commit rather than a release tag, and for a
+    running version that is not a semantic version. Reinstalling would replace
+    the build with a release that may be older, with no way to tell which is
+    newer. This is the analog of goselfupdate's ErrDevBuild.
     """
 
 
