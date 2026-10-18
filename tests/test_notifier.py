@@ -234,7 +234,7 @@ def test_unparseable_intervals_are_ignored(raw: str) -> None:
     assert parse_interval(raw) is None
 
 
-def test_the_tool_interval_outranks_the_fleet_interval(pinned, state_home: Path, out, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_tool_interval_outranks_the_shared_interval(pinned, state_home: Path, out, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('AUTO_UPDATE_INTERVAL', '99d')
     monkeypatch.setenv('DEMO_AUTO_UPDATE_INTERVAL', '0s')
     source = StubSource(tag='v2.0.0')

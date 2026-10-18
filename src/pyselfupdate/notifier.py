@@ -28,11 +28,12 @@ from pyselfupdate.updater import installed_from_release
 
 DEFAULT_INTERVAL = dt.timedelta(hours=24)
 
-# Environment variables. Presence-only, any value including empty -- the
+# The environment variables every tool honors, beside its own `<TOOL>_` forms.
+# The disable switch is presence-only, any value including empty -- the
 # NO_COLOR convention -- so that NO_AUTO_UPDATE=0 cannot mean "on". The interval
 # gets its own name precisely so presence and value never share one variable.
-FLEET_DISABLE = 'NO_AUTO_UPDATE'
-FLEET_INTERVAL = 'AUTO_UPDATE_INTERVAL'
+_SHARED_DISABLE_VARIABLE = 'NO_AUTO_UPDATE'
+_SHARED_INTERVAL_VARIABLE = 'AUTO_UPDATE_INTERVAL'
 
 CI_VARIABLES = ('CI', 'BUILD_NUMBER', 'RUN_ID', 'GITHUB_ACTIONS', 'CODESPACES')
 
@@ -201,7 +202,7 @@ def _emit(message: str, *, out: TextIO | None, defer: bool) -> None:
 
 
 def _disabled_by_env(tool: str) -> bool:
-    return FLEET_DISABLE in os.environ or _tool_variable(tool, 'NO_AUTO_UPDATE') in os.environ
+    return _SHARED_DISABLE_VARIABLE in os.environ or _tool_variable(tool, 'NO_AUTO_UPDATE') in os.environ
 
 
 def _in_ci() -> bool:
@@ -250,7 +251,7 @@ def _is_local_install(config: Config) -> bool:
 def _interval(tool: str, override: dt.timedelta | None) -> dt.timedelta:
     if override is not None:
         return override
-    for name in (_tool_variable(tool, 'AUTO_UPDATE_INTERVAL'), FLEET_INTERVAL):
+    for name in (_tool_variable(tool, 'AUTO_UPDATE_INTERVAL'), _SHARED_INTERVAL_VARIABLE):
         raw = os.environ.get(name)
         if raw:
             parsed = parse_interval(raw)
