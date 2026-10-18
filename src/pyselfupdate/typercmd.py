@@ -9,7 +9,7 @@ click or anything else:
     from pyselfupdate import Config
     from pyselfupdate.typercmd import add_update_command
 
-    config = Config(tool='syncer', owner='datapointchris')
+    config = Config(tool='mytool', owner='you')
     add_update_command(app, config)
 
 Go solves the same problem with module graph pruning, which lets goselfupdate
@@ -59,10 +59,10 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
     The step order is the load-bearing part. Everything that reaches the network
     or imports a module happens before the install; after it, this process only
     prints what it already holds and exits without unwinding. Both halves of
-    that are lessons from a real failure: syncer 4.0.0 fetched its changelog
-    after replacing its own environment, and died on httpx's lazy import of
-    httpcore -- a module the release it had just installed no longer depended
-    on, and so had just deleted.
+    that come from a real failure. A tool that fetched its changelog after
+    replacing its own environment died on its HTTP client's lazy import of a
+    transport module. The release it had just installed did not depend on that
+    module, so the install had deleted it.
     """
     tool = config.tool
     try:

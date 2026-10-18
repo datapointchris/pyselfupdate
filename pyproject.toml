@@ -17,7 +17,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# The floor is deliberately below the 3.13 the author's own tools use. Raising
+# The floor is deliberately below the 3.13 a new project would start on. Raising
 # it excludes callers and needs a reason beyond convenience. 3.11 is what
 # `tomllib` requires, and reading uv's receipt without a TOML dependency is what
 # keeps this package dependency-free.

@@ -4,9 +4,9 @@ A public Python library, not a CLI. There is no entry point and nothing to
 install as a tool; it ships to PyPI and is consumed by Python CLIs installed
 with `uv tool`.
 
-Unlike most repos here, this one is written to be used by strangers. Treat the
-public API, the README and the docstrings as the product — a change that is
-merely convenient for the internal consumers is not automatically right.
+Its users are strangers, who know it only through what it ships. Treat the
+public API, the README and the docstrings as the product. A change that suits
+one known consumer is not right for that reason alone.
 
 It is the Python sibling of goselfupdate and bashselfupdate, which the README
 links. The three deliberately share conventions and version precedence. All
@@ -167,9 +167,9 @@ The changelog is the GitHub release body, written by python-semantic-release
 from the commit subjects in the release. Nothing commits it back to the repo, so
 the commit message is where a change explains itself to a consumer.
 
-After releasing, bump each consumer with `uv add 'pyselfupdate[typer]>=<version>'`,
-or without `[typer]` where it declares none. That raises the floor and moves the
-lock together. A consumer's locked install runs the version its lock names, so
-a lock left behind keeps the old release. During development, point a consumer
-at the local checkout with `tool.uv.sources` rather than publishing a version
-per change.
+A consumer takes a release with `uv add 'pyselfupdate[typer]>=<version>'`, or
+without `[typer]` where it declares none. That raises the floor and moves the
+lock together. A locked install runs the version its lock names, so a lock left
+behind keeps the old release. To try a change in a consumer before releasing
+it, point the consumer's `tool.uv.sources` at the local checkout rather than
+publishing a version per change.

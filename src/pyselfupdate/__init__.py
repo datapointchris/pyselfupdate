@@ -4,7 +4,7 @@ Two layers, used independently:
 
     from pyselfupdate import Config, notify, update
 
-    config = Config(tool='syncer', owner='datapointchris')
+    config = Config(tool='mytool', owner='you')
 
     notify(config)   # once a day, print one line if behind. Never raises.
     update(config)   # install the latest release. Raises on failure.

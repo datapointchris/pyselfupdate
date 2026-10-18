@@ -18,9 +18,9 @@ DEFAULT_TIMEOUT = 10.0
 class Config:
     """Describes one updatable tool.
 
-    `tool` is the only required field. Everything else either has a working
-    default or is derived from it, so the common case is `Config(tool='syncer',
-    owner='datapointchris')`.
+    `tool` is required, and so is `owner` unless `source` is given. Everything
+    else has a working default or is derived from those two, so the common case
+    is `Config(tool='mytool', owner='you')`.
     """
 
     # The uv tool name. Names the receipt directory, the entry point, and the
