@@ -1,9 +1,9 @@
-"""Holding an update to the release's uv.lock, against real git and real uv.
+"""What an update hands uv, against real git and real uv.
 
-The stubs in test_updater.py prove which pins reach the install. Only uv can
-prove what those pins do, so these tests build repositories and a wheel
-directory under tmp and run uv offline against them. Nothing reaches an index,
-and nothing is written outside tmp.
+The stubs in test_updater.py prove which pins and flags reach the install. Only
+uv can prove what they do, so these tests build repositories, a wheel directory
+and an index on disk under tmp, and run uv offline against them. Nothing reaches
+the network, and nothing is written outside tmp.
 """
 
 from __future__ import annotations
@@ -32,19 +32,34 @@ def git(repo: Path, *args: str) -> None:
     subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True, env={**os.environ, **identity})
 
 
-def wheel(index: Path, name: str, version: str) -> None:
-    """A pure-Python wheel written by hand, so the directory needs no build backend."""
+def wheel(index: Path, name: str, version: str, *, script: bool = False) -> None:
+    """A pure-Python wheel written by hand, so the directory needs no build backend.
+
+    `uv tool install` removes a package that provides no executable, so a tool's
+    wheel carries a `script` named for it.
+    """
     info = f'{name}-{version}.dist-info'
     files = {
-        f'{name}/__init__.py': '',
+        f'{name}/__init__.py': 'def main():\n    pass\n' if script else '',
         f'{info}/METADATA': f'Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n',
         f'{info}/WHEEL': 'Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n',
     }
+    if script:
+        files[f'{info}/entry_points.txt'] = f'[console_scripts]\n{name} = {name}:main\n'
     record = [f'{path},sha256={digest(body)},{len(body.encode())}' for path, body in files.items()]
     files[f'{info}/RECORD'] = '\n'.join([*record, f'{info}/RECORD,,', ''])
     with zipfile.ZipFile(index / f'{name}-{version}-py3-none-any.whl', 'w') as packed:
         for path, body in files.items():
             packed.writestr(path, body)
+
+
+def publish(index: Path, name: str, version: str) -> None:
+    """Adds a tool's wheel to a PEP 503 index on disk, which uv reads offline through its `file://` URL."""
+    directory = index / name
+    directory.mkdir(parents=True, exist_ok=True)
+    wheel(directory, name, version, script=True)
+    links = ''.join(f'<a href="{path.name}">{path.name}</a>\n' for path in sorted(directory.glob('*.whl')))
+    (directory / 'index.html').write_text(f'<html><body>\n{links}</body></html>\n')
 
 
 def digest(body: str) -> str:
@@ -183,6 +198,26 @@ def test_an_update_keeps_the_tools_extras_and_what_was_installed_beside_it(tmp_p
     assert [installed(tools, 'locktool', package) for package in ('fastdemo', 'withdemo', 'editwith')] == ['1.0.0', '1.0.0', '1.0.0']
     after = read_installation('locktool')
     assert (after.extras, after.with_requirements) == (before.extras, before.with_requirements)
+
+
+def test_an_index_install_updates_from_its_index_and_stays_upgradeable(
+    tmp_path: Path, offline: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The index reaches uv only as the first install's `--index`, not from the environment."""
+    monkeypatch.delenv('UV_NO_INDEX')
+    monkeypatch.delenv('UV_FIND_LINKS')
+    index = tmp_path / 'simple'
+    publish(index, 'idxtool', '1.0.0')
+    subprocess.run(['uv', 'tool', 'install', '--index', index.as_uri(), 'idxtool==1.0.0'], check=True, capture_output=True)
+    publish(index, 'idxtool', '2.0.0')
+    tools = tmp_path / 'tools'
+
+    update(Config(tool='idxtool', version='1.0.0', source=StubSource(tag='v2.0.0')))
+    assert installed(tools, 'idxtool', 'idxtool') == '2.0.0'
+
+    publish(index, 'idxtool', '3.0.0')
+    subprocess.run(['uv', 'tool', 'upgrade', 'idxtool'], check=True, capture_output=True)
+    assert installed(tools, 'idxtool', 'idxtool') == '3.0.0'
 
 
 def test_a_tag_with_no_lock_reads_as_none(tmp_path: Path, offline: Path) -> None:

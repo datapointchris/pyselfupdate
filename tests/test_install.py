@@ -57,11 +57,41 @@ def test_reads_a_branch_tracking_git_install(make_receipt) -> None:
     assert installation.revision == ''
 
 
-def test_reads_an_index_install(make_receipt) -> None:
-    make_receipt('codespell', '{ name = "codespell" }')
+def test_reads_an_index_install_and_the_flags_reaching_its_sources(make_receipt) -> None:
+    """The explicit index is one only a config file declares, which the reinstall reads again.
+    The repeated index is one a config file declared and an update passed back."""
+    home = '{ name = "home", url = "https://pypi.example.com/simple/", explicit = false, default = false, format = "simple" }'
+    make_receipt(
+        'codespell',
+        '{ name = "codespell", specifier = ">=2.4.0" }',
+        'python = "3.14"\n[tool.options]\nindex = ['
+        '{ url = "https://pypi.org/simple/", explicit = false, default = true, format = "simple" }, '
+        f'{home}, {home}, '
+        '{ name = "torch", url = "https://torch.example.com/", explicit = true, default = false, format = "simple" }]\n'
+        'extra-index-url = ["https://extra.example.com/simple/"]\n'
+        'find-links = ["file:///wheels"]\n'
+        'index-strategy = "unsafe-best-match"\n'
+        'no-index = true\n'
+        'link-mode = "copy"\n',
+    )
 
     installation = read_installation('codespell')
     assert installation.kind is InstallKind.INDEX
+    assert installation.source_flags == (
+        '--python',
+        '3.14',
+        '--default-index',
+        'https://pypi.org/simple/',
+        '--index',
+        'home=https://pypi.example.com/simple/',
+        '--extra-index-url',
+        'https://extra.example.com/simple/',
+        '--find-links',
+        'file:///wheels',
+        '--index-strategy',
+        'unsafe-best-match',
+        '--no-index',
+    )
 
 
 def test_reads_the_tools_extras_and_rebuilds_what_was_installed_beside_it(make_receipt, tmp_path: Path) -> None:
@@ -147,8 +177,3 @@ def test_requirement_for_a_git_install_keeps_a_prefixed_tag_intact() -> None:
     """A nested module's tag is `cli/v1.2.0` and git needs it spelled exactly."""
     installation = Installation('democli', InstallKind.GIT, url='https://github.com/x/monorepo.git', revision='cli/v0.3.0')
     assert requirement_for(installation, 'cli/v0.3.3') == 'democli @ git+https://github.com/x/monorepo.git@cli/v0.3.3'
-
-
-def test_requirement_for_an_index_install_uses_a_version_specifier() -> None:
-    installation = Installation('codespell', InstallKind.INDEX)
-    assert requirement_for(installation, 'v2.4.1') == 'codespell==2.4.1'

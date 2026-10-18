@@ -54,7 +54,13 @@ def installs(monkeypatch: pytest.MonkeyPatch, held: list[Pins | None], beside: l
     """Records the requirements that would have been installed."""
     recorded: list[str] = []
 
-    def record(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
+    def record(
+        requirement: str,
+        quiet: bool = True,
+        pins: Pins | None = None,
+        with_requirements: tuple[str, ...] = (),
+        source_flags: tuple[str, ...] = (),
+    ) -> None:
         recorded.append(requirement)
         held.append(pins)
         beside.append(tuple(with_requirements))
@@ -195,7 +201,7 @@ def test_an_index_install_reads_no_lock(make_receipt, installs, held, lock: Stub
 
     result = update(config(StubSource(tag='v2.0.0')))
 
-    assert installs == ['demo==2.0.0']
+    assert installs == ['demo>=2.0.0']
     assert lock.reads == []
     assert held == [None]
     assert not result.lock_missing
@@ -252,7 +258,7 @@ def test_update_refuses_before_checking_the_source(make_receipt) -> None:
 
 
 def test_an_install_failure_propagates(pinned, monkeypatch: pytest.MonkeyPatch) -> None:
-    def explode(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
+    def explode(*_: object, **__: object) -> None:
         raise InstallFailedError('uv tool install failed: no such ref')
 
     monkeypatch.setattr(update_module, 'run_install', explode)

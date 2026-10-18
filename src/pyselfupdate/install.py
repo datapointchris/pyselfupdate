@@ -77,6 +77,11 @@ class Installation:
     # editable back.
     with_requirements: tuple[str, ...] = ()
 
+    # uv flags reproducing the receipt's Python and package sources, from
+    # `_source_flags`. `uv tool install --force` reads neither back from the
+    # receipt it replaces, so an update passes them itself.
+    source_flags: tuple[str, ...] = ()
+
     # Names of the receipt requirements `_requirement_line` returns None for.
     # `read_installation` records them rather than raising: the notify gate
     # treats a failed read as a local install and prints no notice. `update`
@@ -122,7 +127,8 @@ def read_installation(tool: str) -> Installation:
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise NotInstalledError(f'cannot read {receipt}: {error}') from error
 
-    requirements = (payload.get('tool') or {}).get('requirements') or []
+    recorded = payload.get('tool') or {}
+    requirements = recorded.get('requirements') or []
     own = next((requirement for requirement in requirements if requirement.get('name') == tool), None)
     if own is None:
         raise NotInstalledError(f'{receipt} lists no requirement named {tool}')
@@ -140,7 +146,7 @@ def read_installation(tool: str) -> Installation:
 
     def installed_as(kind: InstallKind, url: str = '', revision: str = '') -> Installation:
         extras = tuple(own.get('extras') or ())
-        return Installation(tool, kind, url, revision, extras, tuple(rebuilt), tuple(unrebuildable))
+        return Installation(tool, kind, url, revision, extras, tuple(rebuilt), _source_flags(recorded), tuple(unrebuildable))
 
     # A local checkout, however uv spelled it. Reinstalling one would
     # discard the working copy the user is developing against.
@@ -154,6 +160,43 @@ def read_installation(tool: str) -> Installation:
         return installed_as(InstallKind.GIT, url=url, revision=query.get('rev', ''))
 
     return installed_as(InstallKind.INDEX)
+
+
+def _source_flags(recorded: dict) -> tuple[str, ...]:
+    """The uv flags that reinstall onto the receipt's Python from the receipt's package sources.
+
+    Without them a reinstall resolves against PyPI alone and moves to uv's
+    default Python. uv records a setting from a flag, the environment or a
+    config file alike, and cannot say which. An `explicit` or `flat` index only
+    a config file can declare, and that file is read again by the reinstall, so
+    it is left out. Dropping any other recorded option changes how the tool
+    resolves or builds, never whether its packages can be found.
+    """
+    options = recorded.get('options') or {}
+    pairs: list[tuple[str, str]] = []
+    if recorded.get('python'):
+        pairs.append(('--python', str(recorded['python'])))
+    for index in options.get('index') or ():
+        if index.get('explicit') or index.get('format', 'simple') != 'simple' or not index.get('url'):
+            continue
+        if index.get('default'):
+            pairs.append(('--default-index', str(index['url'])))
+        else:
+            name = index.get('name')
+            pairs.append(('--index', f'{name}={index["url"]}' if name else str(index['url'])))
+    if options.get('index-url'):
+        pairs.append(('--index-url', str(options['index-url'])))
+    pairs += [('--extra-index-url', str(url)) for url in options.get('extra-index-url') or ()]
+    pairs += [('--find-links', str(location)) for location in options.get('find-links') or ()]
+    pairs += [(f'--{key}', str(options[key])) for key in ('index-strategy', 'keyring-provider') if options.get(key)]
+    if options.get('no-index'):
+        pairs.append(('--no-index', ''))
+
+    # A source declared in a config file is recorded again beside the flag that
+    # passes it back. Passing each source once holds it at two copies, rather
+    # than adding one to the receipt per update.
+    distinct = dict.fromkeys(pairs)
+    return tuple(part for flag, value in distinct for part in (flag, value) if part)
 
 
 def _split_git(git: str) -> tuple[str, dict[str, str], str]:
@@ -221,11 +264,15 @@ def current_version(package: str) -> str:
 
 
 def requirement_for(installation: Installation, ref: str) -> str:
-    """The requirement string that installs `ref` of an already-installed tool, with the extras it has."""
+    """The requirement string that installs `ref` of an already-installed tool, with the extras it has.
+
+    An index install takes `ref` as a floor. uv records the specifier in the
+    receipt, and `uv tool upgrade` refuses to move an exact pin.
+    """
     named = f'{installation.tool}[{",".join(installation.extras)}]' if installation.extras else installation.tool
     if installation.kind is InstallKind.GIT:
         return f'{named} @ git+{installation.url}@{ref}'
-    return f'{named}=={ref.removeprefix("v")}'
+    return f'{named}>={ref.removeprefix("v")}'
 
 
 @dataclass(frozen=True)
@@ -355,7 +402,14 @@ def _pins_from_export(exported: str, extras: dict[str, tuple[str, ...]]) -> Pins
     return Pins(tuple(constraints), tuple(overrides))
 
 
-def run_install(requirement: str, *, quiet: bool = True, pins: Pins | None = None, with_requirements: Sequence[str] = ()) -> None:
+def run_install(
+    requirement: str,
+    *,
+    quiet: bool = True,
+    pins: Pins | None = None,
+    with_requirements: Sequence[str] = (),
+    source_flags: Sequence[str] = (),
+) -> None:
     """Install a requirement over any existing tool of that name, held to `pins` when given.
 
     `with_requirements` are requirements-file lines installed beside the tool,
@@ -374,7 +428,7 @@ def run_install(requirement: str, *, quiet: bool = True, pins: Pins | None = Non
             listed = Path(scratch) / 'with.txt'
             listed.write_text(''.join(f'{line}\n' for line in with_requirements), encoding='utf-8')
             beside = ['--with-requirements', str(listed)]
-        command = [executable, 'tool', 'install', '--force', *held, *beside, requirement]
+        command = [executable, 'tool', 'install', '--force', *source_flags, *held, *beside, requirement]
         if quiet:
             command.insert(1, '--quiet')
         completed = _run(command)

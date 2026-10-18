@@ -131,7 +131,13 @@ def install_release(config: Config, result: Result, installation: Installation, 
 
     ref = result.release.install_ref()
     pins = read_lock(installation.url, ref, extras=installation.extras) if installation.kind is InstallKind.GIT else None
-    run_install(requirement_for(installation, ref), quiet=quiet, pins=pins, with_requirements=installation.with_requirements)
+    run_install(
+        requirement_for(installation, ref),
+        quiet=quiet,
+        pins=pins,
+        with_requirements=installation.with_requirements,
+        source_flags=installation.source_flags,
+    )
 
     return Result(
         current=result.current,

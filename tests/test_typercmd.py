@@ -52,7 +52,13 @@ def lock(monkeypatch: pytest.MonkeyPatch) -> StubLock:
 def installs(monkeypatch: pytest.MonkeyPatch, events: list[str]) -> list[str]:
     recorded: list[str] = []
 
-    def record(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
+    def record(
+        requirement: str,
+        quiet: bool = True,
+        pins: Pins | None = None,
+        with_requirements: tuple[str, ...] = (),
+        source_flags: tuple[str, ...] = (),
+    ) -> None:
         events.append('install')
         recorded.append(requirement)
 
@@ -149,7 +155,7 @@ def test_an_install_update_refuses_is_refused_before_any_request(
 
 
 def test_an_install_failure_exits_non_zero(pinned, exits, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
-    def explode(requirement: str, quiet: bool = True, pins: Pins | None = None, with_requirements: tuple[str, ...] = ()) -> None:
+    def explode(*_: object, **__: object) -> None:
         raise InstallFailedError('uv tool install failed: no such ref')
 
     monkeypatch.setattr(update_module, 'run_install', explode)

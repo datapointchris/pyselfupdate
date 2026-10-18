@@ -107,11 +107,11 @@ def uv_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def make_receipt(uv_tools: Path):
     """Writes a uv receipt of a given shape and returns the tool directory."""
 
-    def write(tool: str, requirement: str) -> Path:
+    def write(tool: str, requirement: str, recorded: str = '') -> Path:
         directory = uv_tools / tool
         directory.mkdir(parents=True, exist_ok=True)
         (directory / 'uv-receipt.toml').write_text(
-            f'[tool]\nrequirements = [{requirement}]\nentrypoints = []\n',
+            f'[tool]\nrequirements = [{requirement}]\nentrypoints = []\n{recorded}',
             encoding='utf-8',
         )
         return directory

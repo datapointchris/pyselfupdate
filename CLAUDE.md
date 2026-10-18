@@ -130,9 +130,9 @@ offline.
 
 The install has the same two layers. `StubLock` stands in for `read_lock` in the
 updater and typercmd tests. `test_lock.py` runs real git and real uv against
-repositories and a wheel directory it builds under tmp, with uv offline and
-every tool directory redirected there. No other test shows what the pins do to
-an install.
+repositories, a wheel directory and an index it builds under tmp, with uv
+offline and every tool directory redirected there. No other test shows what the
+pins and the receipt's source flags do to an install.
 
 **Terminal detection is injected, never faked by reassigning `sys.stdout`.**
 pytest's capture reinstalls its own streams between fixture setup and the test

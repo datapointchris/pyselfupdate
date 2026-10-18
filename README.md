@@ -198,11 +198,25 @@ later `uv tool upgrade` stays held to them.
 | Carries none | Installs unlocked and sets `lock_missing`. `lock_warning` names the tag, and `run_update` and `update_and_reexec` print it |
 | Will not clone, uv will not export its lock, or git or uv is not on `PATH` | Raises `LockUnreadableError` and installs nothing |
 
-An install from an index reads no lock, because a wheel carries none.
+An install from an index reads no lock, because a wheel carries none. It
+takes the release as a floor, `mytool>=2.0.0`, rather than a pin. uv records
+the specifier in the receipt, and `uv tool upgrade` refuses to move an exact
+pin.
 
 An update reinstalls the tool's own extras, as in `mytool[fast]`, with their
 dependencies held to the lock. Every `--with` and `--with-editable`
 requirement is passed back to uv as well.
+
+`uv tool install --force` reads nothing back from the receipt it replaces. So
+an update passes back the receipt's `--python` and the flags naming where its
+packages come from: `--index`, `--default-index`, `--index-url`,
+`--extra-index-url`, `--find-links`, `--no-index`, `--index-strategy` and
+`--keyring-provider`. Without them, a tool installed with
+`--index https://pypi.example.com/simple/` resolves its update against PyPI
+alone and is not found. An `explicit` index is left out, because only a config
+file can declare one and the reinstall reads that file again. Dropping any
+other recorded option changes how the tool resolves or builds, never whether it
+is found.
 
 ## What may be updated is read from uv's receipt, not guessed from the version
 
