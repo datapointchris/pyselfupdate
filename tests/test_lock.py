@@ -228,7 +228,7 @@ def test_a_tag_with_no_lock_reads_as_none(tmp_path: Path, offline: Path) -> None
 
 
 def test_the_lock_is_read_at_the_ref_asked_for(tmp_path: Path, offline: Path) -> None:
-    """The branch head locks `pindemo` 2.0.0, so reading the head returns `pindemo==2.0.0`."""
+    """The branch head locks `pindemo` 2.0.0, so a read of the head instead of `v1.0.0` would pin 2.0.0."""
     wheel(offline, 'pindemo', '1.0.0')
     tool = tmp_path / 'locktool'
     release(tool, 'locktool', '1.0.0', ('pindemo>=1',))

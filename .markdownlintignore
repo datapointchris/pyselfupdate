@@ -1,4 +1,3 @@
-# Preventive: no release here writes a changelog. The entry stands so that one
-# arriving generated is never linted, since normalization of a generated file
-# is undone on the next release and returns as a conflict.
+# No release here writes a changelog. If one arrives generated, `--fix` would
+# normalize it, the next release would undo that, and the two would conflict.
 CHANGELOG.md

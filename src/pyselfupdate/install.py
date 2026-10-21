@@ -442,11 +442,11 @@ def _run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedPro
 
 
 def _reason(completed: subprocess.CompletedProcess[str]) -> str:
-    """Everything a failing command printed, rather than one line of it.
+    """Everything a failing command printed.
 
-    uv puts a lock's schema error on its first line, git puts a missing ref on
-    its last, and uv wraps a resolution failure so its last line is half a
-    sentence.
+    No single line carries the reason: uv puts a lock's schema error on its
+    first line, git puts a missing ref on its last, and uv wraps a resolution
+    failure so its last line is half a sentence.
     """
     return (completed.stderr or completed.stdout or '').strip() or f'exit status {completed.returncode}'
 

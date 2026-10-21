@@ -120,8 +120,8 @@ fail in ways that are hard to read.
 
 So make `update` the last thing the process does, then call `exit_now`. Or call
 `update_and_reexec`, which replaces the process with the release it installed,
-running the same command line. Its caller never sees the `Result`, so it writes
-`lock_warning` to stderr itself before the re-exec.
+running the same command line. `update_and_reexec` writes `lock_warning` to
+stderr itself before the re-exec, because its caller never sees the `Result`.
 
 `check` reports what `update` would install, and installs nothing:
 
