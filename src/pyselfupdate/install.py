@@ -95,6 +95,7 @@ def tool_dir() -> Path:
     `UV_TOOL_DIR` first. Otherwise uv's data directory: `%APPDATA%\\uv` on
     Windows, where uv ignores `XDG_DATA_HOME`, and `$XDG_DATA_HOME/uv` or
     `~/.local/share/uv` everywhere else.
+
     Resolved from the environment rather than by running `uv tool dir`, which
     costs a subprocess on a path that runs before every command.
     """

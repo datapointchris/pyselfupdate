@@ -124,10 +124,6 @@ def _asking_for_help() -> bool:
     screen. Nothing a notice is for happens on a help screen, and the check
     costs a releases-API call and a state write every time.
 
-    It lands hardest on a reader that walks a tool's help. Reading every
-    command's help is one invocation per command plus one for the root, and
-    each of them reaches this.
-
     A `--` ends the scan, because everything after it is the command's own
     argument. Skipping when it should not have costs a missed notice, which is
     the cheap direction to be wrong in.

@@ -52,17 +52,15 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
     library report an update in the same words.
 
     `check_only` reads the receipt first, as an update does, and refuses the
-    same installs. A branch build's version can rank below the release it is
-    ahead of, so a check that skipped the receipt would offer that older
-    release as an update.
+    same installs. `updater.installed_from_release` says why a version alone
+    cannot decide.
 
-    The step order is the load-bearing part. Everything that reaches the network
-    or imports a module happens before the install; after it, this process only
-    prints what it already holds and exits without unwinding. Both halves of
-    that come from a real failure. A tool that fetched its changelog after
-    replacing its own environment died on its HTTP client's lazy import of a
-    transport module. The release it had just installed did not depend on that
-    module, so the install had deleted it.
+    Everything that reaches the network or imports a module happens before the
+    install; after it, this process only prints what it already holds and exits
+    without unwinding. An import after the install can name a module the new
+    release no longer ships, which the install has already deleted. An HTTP
+    client's lazy import of its transport is one, and it raises ImportError
+    after the update has succeeded.
     """
     tool = config.tool
     try:

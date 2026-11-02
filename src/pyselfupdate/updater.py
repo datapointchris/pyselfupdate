@@ -97,9 +97,8 @@ def installed_from_release(installation: Installation, tag_prefix: str) -> bool:
 
     An index install is. A git install is when its revision is a release tag:
     `tag_prefix` followed by a semantic version, the form a release's
-    `install_ref` takes. uv writes `?rev=` for whatever followed the `@`.
-    `@main` and `@v1.2.3` land in the same field, so only the value tells a
-    branch from a tag.
+    `install_ref` takes. `Installation.revision` holds a branch or a commit in
+    the same field, so only the value tells them apart.
 
     A build from a branch reports a version that ranks wrongly against a
     release. Versioned from git tags, a branch three commits past v1.2.3 builds
