@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import os
 import subprocess
 import sys
 import zipfile
@@ -29,8 +28,8 @@ from pyselfupdate.install import read_lock
 
 
 def git(repo: Path, *args: str) -> None:
-    identity = {'GIT_AUTHOR_NAME': 'T', 'GIT_AUTHOR_EMAIL': 't@t', 'GIT_COMMITTER_NAME': 'T', 'GIT_COMMITTER_EMAIL': 't@t'}
-    subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True, env={**os.environ, **identity})
+    identity = ('-c', 'user.name=T', '-c', 'user.email=t@t')
+    subprocess.run(['git', '-C', str(repo), *identity, *args], check=True, capture_output=True)
 
 
 def wheel(index: Path, name: str, version: str, *, script: bool = False) -> None:

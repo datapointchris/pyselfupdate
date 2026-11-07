@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import Path
@@ -34,6 +35,15 @@ GATE_VARIABLES = (
     'GITHUB_TOKEN',
     'GH_TOKEN',
 )
+
+# The variables git exports into the processes it launches, GIT_DIR and
+# GIT_INDEX_FILE among them. A hook or a `git rebase --exec` run from a linked
+# worktree hands them to the suite, and GIT_DIR outranks `git -C`, so the
+# repositories test_lock.py builds under tmp would be initialized, committed
+# and tagged in the repository running the suite instead.
+GIT_REPOSITORY_VARIABLES = subprocess.run(
+    ['git', 'rev-parse', '--local-env-vars'], capture_output=True, text=True, check=True
+).stdout.split()
 
 
 @dataclass
@@ -86,6 +96,12 @@ def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     # A test that wants the default asks for it, and one that wants a token sets
     # this to a command that prints one.
     monkeypatch.setenv('GITHUB_TOKEN_COMMAND', '')
+
+
+@pytest.fixture(autouse=True)
+def clear_git_repository_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in GIT_REPOSITORY_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
