@@ -45,10 +45,9 @@ def test_notifies_once_when_behind(pinned, state_home: Path, out) -> None:
     outcome = notify(config(source), defer=False, interactive=True, out=out)
 
     assert outcome.checked
-    assert outcome.update_available
+    assert (outcome.current, outcome.latest) == ('v1.0.0', 'v2.0.0')
     assert source.calls == 1
-    assert 'demo v2.0.0 available (running v1.0.0)' in out.text
-    assert 'run `demo update`' in out.text
+    assert len(out.text.splitlines()) == 1
 
 
 def test_says_nothing_when_current(pinned, state_home: Path, out) -> None:

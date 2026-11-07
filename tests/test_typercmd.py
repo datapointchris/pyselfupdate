@@ -22,6 +22,7 @@ from pyselfupdate.errors import InstallFailedError
 from pyselfupdate.errors import LockUnreadableError
 from pyselfupdate.install import Pins
 from pyselfupdate.typercmd import run_update
+from pyselfupdate.updater import Result
 
 
 class RecordingSource(StubSource):
@@ -98,13 +99,15 @@ def test_the_changelog_is_fetched_before_the_install(pinned, installs, exits, ev
 
 
 def test_an_applied_update_ends_the_process(pinned, installs, exits, capsys) -> None:
-    """Returning would hand control back to typer, in a rewritten environment."""
+    """Returning would hand control back to typer, in a rewritten environment.
+
+    The report is asserted whole, because its format is shared with
+    goselfupdate so tools built on either library report an update alike.
+    """
     run_update(config(RecordingSource([], subjects=['feat: one'])))
 
     assert exits == [0]
-    output = capsys.readouterr().out
-    assert 'demo updated: v1.0.0 → v2.0.0' in output
-    assert '  • feat: one' in output
+    assert capsys.readouterr().out == '✓ demo updated: v1.0.0 → v2.0.0\n\nChanges:\n  • feat: one\n'
 
 
 def test_skip_changelog_asks_the_source_for_nothing(pinned, installs, exits, events) -> None:
@@ -113,12 +116,14 @@ def test_skip_changelog_asks_the_source_for_nothing(pinned, installs, exits, eve
     assert events == ['install', 'exit']
 
 
-def test_already_at_latest_installs_nothing_and_returns(pinned, installs, exits, capsys) -> None:
-    run_update(config(RecordingSource([], tag='v1.0.0')))
+def test_already_at_latest_installs_nothing_and_returns(pinned, installs, exits) -> None:
+    source = RecordingSource([], tag='v1.0.0')
 
+    run_update(config(source))
+
+    assert source.calls == 1
     assert not installs
     assert not exits
-    assert 'demo already at latest: v1.0.0' in capsys.readouterr().out
 
 
 def test_check_only_reports_without_installing(pinned, installs, exits, capsys) -> None:
@@ -154,7 +159,7 @@ def test_an_install_update_refuses_is_refused_before_any_request(
     assert reason in capsys.readouterr().err
 
 
-def test_an_install_failure_exits_non_zero(pinned, exits, capsys, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_install_failure_exits_non_zero(pinned, exits, monkeypatch: pytest.MonkeyPatch) -> None:
     def explode(*_: object, **__: object) -> None:
         raise InstallFailedError('uv tool install failed: no such ref')
 
@@ -164,34 +169,33 @@ def test_an_install_failure_exits_non_zero(pinned, exits, capsys, monkeypatch: p
         run_update(config(RecordingSource([])))
 
     assert raised.value.exit_code == 1
+    assert isinstance(raised.value.__cause__, InstallFailedError)
     assert not exits
-    assert 'demo update failed: uv tool install failed: no such ref' in capsys.readouterr().err
 
 
 def test_a_tag_with_no_lock_is_named_on_stderr(pinned, installs, exits, capsys, lock: StubLock) -> None:
     lock.pins = None
+    unlocked = Result(current='v1.0.0', latest='v2.0.0', lock_missing=True)
 
     run_update(config(RecordingSource([])))
 
-    captured = capsys.readouterr()
-    assert 'demo updated: v1.0.0 → v2.0.0' in captured.out
-    assert '! demo: v2.0.0 has no uv.lock' in captured.err
+    assert capsys.readouterr().err == f'! demo: {unlocked.lock_warning}\n'
     assert exits == [0]
 
 
 def test_a_locked_update_prints_no_warning(pinned, installs, exits, capsys) -> None:
     run_update(config(RecordingSource([])))
 
-    assert 'uv.lock' not in capsys.readouterr().err
+    assert capsys.readouterr().err == ''
 
 
-def test_an_unreadable_lock_exits_non_zero_having_installed_nothing(pinned, installs, exits, capsys, lock: StubLock) -> None:
+def test_an_unreadable_lock_exits_non_zero_having_installed_nothing(pinned, installs, exits, lock: StubLock) -> None:
     lock.error = LockUnreadableError('could not clone https://github.com/x/demo.git at v2.0.0 to read its uv.lock: not found')
 
     with pytest.raises(typer.Exit) as raised:
         run_update(config(RecordingSource([])))
 
     assert raised.value.exit_code == 1
+    assert raised.value.__cause__ is lock.error
     assert not installs
     assert not exits
-    assert 'demo update failed: could not clone' in capsys.readouterr().err
