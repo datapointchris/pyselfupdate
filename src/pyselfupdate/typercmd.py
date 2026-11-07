@@ -32,10 +32,39 @@ from pyselfupdate.updater import install_release
 from pyselfupdate.updater import require_updatable
 
 
+def update_help(tool: str, name: str, markup_mode: str | None) -> str:
+    """The update command's help: one line on what it does, then annotated examples.
+
+    Each example keeps a line of its own under each of typer's markup modes,
+    which lay out a help's later paragraphs differently. Markdown joins a
+    paragraph's lines, so the examples sit in a fenced block there. Rich markup
+    keeps the lines as written and would print a fence's backticks. Without
+    rich, click rewraps every paragraph that does not open with its `\\b`
+    marker.
+    """
+    command = f'{tool} {name}'
+    width = len(command) + len(' --no-changelog') + 2
+    examples = '\n'.join(
+        f'{call:<{width}}{purpose}'
+        for call, purpose in (
+            (command, 'install the newest and list its commits'),
+            (f'{command} --check', 'only report whether a newer one exists'),
+            (f'{command} --no-changelog', 'install it without listing its commits'),
+        )
+    )
+    if markup_mode == 'markdown':
+        block = f'```text\n{examples}\n```'
+    elif markup_mode == 'rich':
+        block = examples
+    else:
+        block = f'\b\n{examples}'
+    return f'Update {tool} to the latest release\n\nExamples:\n\n{block}'
+
+
 def add_update_command(app: typer.Typer, config: Config, *, name: str = 'update') -> None:
     """Register `<tool> update` on an existing typer app."""
 
-    @app.command(name=name, help=f'Update {config.tool} to the latest release')
+    @app.command(name=name, help=update_help(config.tool, name, app.rich_markup_mode))
     def update_command(
         check_only: bool = typer.Option(False, '--check', help='Report whether an update is available without installing it'),
         skip_changelog: bool = typer.Option(False, '--no-changelog', help='Do not list the commits between versions'),
