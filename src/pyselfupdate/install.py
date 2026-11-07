@@ -128,7 +128,11 @@ def read_installation(tool: str) -> Installation:
     """
     receipt = tool_dir() / tool / RECEIPT_NAME
     if not receipt.is_file():
-        raise NotInstalledError(f'{tool} is not installed as a uv tool ({receipt} does not exist)')
+        raise NotInstalledError(
+            f'{tool} is not installed as a uv tool ({receipt} does not exist). '
+            f"Install a release with `uv tool install '{tool} @ git+<repository url>@<release tag>'`, "
+            f'or `uv tool install {tool}` from a package index'
+        )
 
     try:
         payload = tomllib.loads(receipt.read_text(encoding='utf-8'))
@@ -333,7 +337,10 @@ def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
     uv = shutil.which('uv')
     if not git or not uv:
         missing = 'git' if not git else 'uv'
-        raise LockUnreadableError(f'{missing} is not on PATH, so the uv.lock at {ref} cannot be read')
+        raise LockUnreadableError(
+            f'{missing} is not on PATH, so the uv.lock at {ref} cannot be read. '
+            f'Install {missing}, or add the directory holding it to PATH, then run the update again'
+        )
 
     # A clone that cannot be deleted stays in the system temp, and the update goes ahead.
     with tempfile.TemporaryDirectory(prefix='pyselfupdate-lock-', ignore_cleanup_errors=True) as scratch:
@@ -439,7 +446,10 @@ def run_install(
     """
     executable = shutil.which('uv')
     if not executable:
-        raise InstallFailedError('uv is not on PATH, so the tool cannot reinstall itself')
+        raise InstallFailedError(
+            'uv is not on PATH, so the tool cannot reinstall itself. '
+            'Add the directory holding uv to PATH, or install uv from https://docs.astral.sh/uv/, then run the update again'
+        )
 
     with tempfile.TemporaryDirectory(prefix='pyselfupdate-pins-', ignore_cleanup_errors=True) as scratch:
         held = pins.arguments(Path(scratch)) if pins else []
