@@ -35,6 +35,27 @@ export. `update.py` would be shadowed by `from pyselfupdate.updater import
 update` in `__init__.py`, so `import pyselfupdate.update` would silently resolve
 to the function and fail on attribute access. Do not rename them back.
 
+## Every external effect has one door
+
+Anything that leaves the process goes through one named function, and every
+caller uses it. That function is where a timeout or a test stub attaches, once.
+
+- **HTTP** goes through `GitHubSource._get`, the package's only request. It
+  opens through `_OPENER`, which drops the credential on a redirect off the
+  origin, and is bounded by `GitHubSource.timeout`.
+- **Subprocesses** go through `install.run_command`, which takes the bound per
+  call. `github.token_from_command` passes `COMMAND_TIMEOUT_SECONDS`, and
+  `install.read_lock` passes `LOCK_READ_TIMEOUT_SECONDS` to its clone and its
+  export. `install.run_install` passes none, because an install killed part
+  way leaves the environment half rewritten.
+- **The state file** is written only by `state.write`, by rename so a reader
+  never sees half a file. The clone `read_lock` reads, and the pin and
+  requirement files `run_install` hands to uv, live in a temporary directory
+  each call owns.
+- **The process itself** is ended by `install.exit_now` (`os._exit`) or
+  replaced by `install.reexec` (`os.execv`). Both are deliberate: after an
+  install the environment has been rewritten, so nothing may unwind or import.
+
 ## Constraints that must not regress
 
 - **The package has zero runtime dependencies**, and CI enforces it two ways: the
