@@ -20,6 +20,7 @@ import pytest
 from conftest import StubSource
 
 from pyselfupdate import Config
+from pyselfupdate import install
 from pyselfupdate import read_installation
 from pyselfupdate import update
 from pyselfupdate.errors import LockUnreadableError
@@ -246,6 +247,17 @@ def test_a_ref_that_will_not_clone_is_refused(tmp_path: Path, offline: Path) -> 
 
     with pytest.raises(LockUnreadableError, match='could not clone .* at v9.9.9'):
         read_lock(tool.as_uri(), 'v9.9.9')
+
+
+def test_a_clone_past_its_bound_is_refused_rather_than_waited_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    def stalled(command: list[str], **options: object) -> subprocess.CompletedProcess[str]:
+        assert options['timeout'] == install.LOCK_READ_TIMEOUT_SECONDS
+        raise subprocess.TimeoutExpired(command, install.LOCK_READ_TIMEOUT_SECONDS)
+
+    monkeypatch.setattr(install, 'run_command', stalled)
+
+    with pytest.raises(LockUnreadableError):
+        read_lock('https://example.invalid/locktool.git', 'v1.0.0')
 
 
 def test_a_lock_uv_will_not_export_is_refused_with_uvs_reason(tmp_path: Path, offline: Path) -> None:

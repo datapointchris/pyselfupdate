@@ -47,6 +47,14 @@ on one line: uv writes every hash as a continuation line, and
 `_pins_from_export` reads line by line.
 """
 
+LOCK_READ_TIMEOUT_SECONDS = 120.0
+"""The bound on each of the clone and the export that read a release's lock.
+
+Both run before anything is installed, so a stalled remote or a credential
+prompt nobody answers fails the update with `LockUnreadableError` rather than
+holding the command someone typed.
+"""
+
 
 class InstallKind(Enum):
     """How a uv tool was installed, which decides whether it may be updated."""
@@ -318,7 +326,8 @@ def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
     a dependent requests of a git dependency, which `_override_extras` restores.
 
     Raises `LockUnreadableError` when git or uv is not on PATH, the ref will not
-    clone, or uv will not export its lock. None is not a failure:
+    clone, uv will not export its lock, or either outlasts
+    `LOCK_READ_TIMEOUT_SECONDS`. None is not a failure:
     `install_release` installs that tag unlocked and sets `lock_missing`.
     """
     git = shutil.which('git')
@@ -330,13 +339,21 @@ def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
     # A clone that cannot be deleted stays in the system temp, and the update goes ahead.
     with tempfile.TemporaryDirectory(prefix='pyselfupdate-lock-', ignore_cleanup_errors=True) as scratch:
         checkout = Path(scratch) / 'checkout'
-        cloned = _run([git, 'clone', '--quiet', '--depth', '1', '--branch', ref, url, str(checkout)])
+        clone = [git, 'clone', '--quiet', '--depth', '1', '--branch', ref, url, str(checkout)]
+        try:
+            cloned = run_command(clone, timeout=LOCK_READ_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as error:
+            raise LockUnreadableError(f'cloning {url} at {ref} to read its uv.lock took longer than {error.timeout:g}s') from error
         if cloned.returncode != 0:
             raise LockUnreadableError(f'could not clone {url} at {ref} to read its uv.lock: {_reason(cloned)}')
         lock = checkout / LOCK_NAME
         if not lock.is_file():
             return None
-        exported = _run([uv, *EXPORT, *chain.from_iterable(('--extra', extra) for extra in extras)], cwd=checkout)
+        export = [uv, *EXPORT, *chain.from_iterable(('--extra', extra) for extra in extras)]
+        try:
+            exported = run_command(export, cwd=checkout, timeout=LOCK_READ_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired as error:
+            raise LockUnreadableError(f'uv export of the uv.lock at {ref} took longer than {error.timeout:g}s') from error
         if exported.returncode != 0:
             raise LockUnreadableError(f'uv export would not read the uv.lock at {ref}: {_reason(exported)}')
         try:
@@ -417,6 +434,9 @@ def run_install(
     the way `--with` and `--with-editable` install them. `--force` is what
     allows an entry point that already exists to be replaced; without it uv
     refuses rather than overwriting.
+
+    The install runs unbounded. Killed part way, it leaves the tool's
+    environment half rewritten, which is worse than a slow install.
     """
     executable = shutil.which('uv')
     if not executable:
@@ -432,14 +452,20 @@ def run_install(
         command = [executable, 'tool', 'install', '--force', *source_flags, *held, *beside, requirement]
         if quiet:
             command.insert(1, '--quiet')
-        completed = _run(command)
+        completed = run_command(command)
 
     if completed.returncode != 0:
         raise InstallFailedError(f'uv tool install failed: {_reason(completed)}')
 
 
-def _run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+def run_command(command: list[str], *, cwd: Path | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
+    """Run a program to completion and capture what it printed.
+
+    Every process this package starts goes through here. `timeout` bounds the call in seconds. Past it the program is killed and
+    `subprocess.TimeoutExpired` is raised, which each caller turns into its own
+    failure. None runs unbounded.
+    """
+    return subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False, timeout=timeout)
 
 
 def _reason(completed: subprocess.CompletedProcess[str]) -> str:

@@ -29,6 +29,7 @@ from typing import IO
 from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.errors import SelfUpdateError
 from pyselfupdate.errors import SourceError
+from pyselfupdate.install import run_command
 from pyselfupdate.source import Release
 
 API = 'https://api.github.com'
@@ -131,7 +132,7 @@ def token_from_command() -> str:
     if not binary:
         return ''
     try:
-        result = subprocess.run([binary, *argv[1:]], capture_output=True, text=True, check=False, timeout=COMMAND_TIMEOUT_SECONDS)  # noqa: S603
+        result = run_command([binary, *argv[1:]], timeout=COMMAND_TIMEOUT_SECONDS)
     except (OSError, subprocess.SubprocessError):
         return ''
     return result.stdout.strip() if result.returncode == 0 else ''
