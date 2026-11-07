@@ -180,6 +180,8 @@ caller matches a type rather than message text:
 | `NotInstalledError` | uv's receipt is missing or unreadable, or holds a `--with` requirement an update would drop |
 | `NoReleaseError` | The source publishes no release, or its newest tag is not a semantic version |
 | `SourceError` | The source could not be reached, or answered with something unusable |
+| `SelfUpdateSourceFailure` | A `SourceError` from a transport or protocol failure, as opposed to a missing release |
+| `RateLimitedError` | A `SelfUpdateSourceFailure` for a spent rate limit. `authenticated` says which ceiling, and `resets_at` when it lifts, or None |
 | `LockUnreadableError` | The release's `uv.lock` could not be read, so nothing was installed |
 | `InstallFailedError` | `uv tool install` ran and failed, or uv is not on `PATH` |
 

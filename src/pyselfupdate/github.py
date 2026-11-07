@@ -27,7 +27,9 @@ from dataclasses import field
 from typing import IO
 
 from pyselfupdate.errors import NoReleaseError
+from pyselfupdate.errors import RateLimitedError
 from pyselfupdate.errors import SelfUpdateError
+from pyselfupdate.errors import SelfUpdateSourceFailure
 from pyselfupdate.errors import SourceError
 from pyselfupdate.install import run_command
 from pyselfupdate.source import Release
@@ -307,15 +309,6 @@ class GitHubSource:
             raise SelfUpdateSourceFailure(f'{API}{path} returned invalid JSON') from error
 
 
-class SelfUpdateSourceFailure(SourceError):
-    """A transport or protocol failure, as opposed to a missing release.
-
-    Distinct from NoReleaseError so a caller can tell "GitHub is unreachable"
-    apart from "this repository has published nothing", which are the same HTTP
-    status for a private repository and want different messages.
-    """
-
-
 def _http_error(owner: str, repo: str, error: urllib.error.HTTPError, *, authenticated: bool) -> SelfUpdateError:
     if error.code == 404:
         # A private repository reached without a token is indistinguishable
@@ -325,12 +318,14 @@ def _http_error(owner: str, repo: str, error: urllib.error.HTTPError, *, authent
     if error.code in (401, 403):
         remaining = error.headers.get('x-ratelimit-remaining') if error.headers else None
         if remaining == '0':
-            return SelfUpdateSourceFailure(_rate_limit_message(error, authenticated=authenticated))
+            resets_at = _reset_moment(error)
+            message = _rate_limit_message(authenticated=authenticated, resets_at=resets_at)
+            return RateLimitedError(message, authenticated=authenticated, resets_at=resets_at)
         return SelfUpdateSourceFailure(f'GitHub refused the request for {owner}/{repo} ({error.code})')
     return SelfUpdateSourceFailure(f'GitHub returned {error.code} for {owner}/{repo}')
 
 
-def _rate_limit_message(error: urllib.error.HTTPError, *, authenticated: bool) -> str:
+def _rate_limit_message(*, authenticated: bool, resets_at: dt.datetime | None) -> str:
     """Which ceiling was hit, and what to do about that one.
 
     The two are different problems with different fixes, and one sentence for
@@ -342,7 +337,10 @@ def _rate_limit_message(error: urllib.error.HTTPError, *, authenticated: bool) -
     The authenticated case should be rare, so it says when the ceiling lifts
     rather than what to change -- there is nothing to change.
     """
-    resets = _reset_clock(error)
+    # A wall-clock time rather than "in 43 minutes", because the message is read
+    # out of a state file long after the request that produced it and a duration
+    # would be counted from the wrong instant.
+    resets = f'; resets at {resets_at:%H:%M} UTC' if resets_at else ''
     if authenticated:
         return f"GitHub's authenticated rate limit (5,000/hour) is exhausted{resets}"
     return (
@@ -351,19 +349,13 @@ def _rate_limit_message(error: urllib.error.HTTPError, *, authenticated: bool) -
     )
 
 
-def _reset_clock(error: urllib.error.HTTPError) -> str:
-    """`; resets at 14:22 UTC`, or nothing when the header is absent or unusable.
-
-    A wall-clock time rather than "in 43 minutes", because the message is read
-    out of a state file long after the request that produced it and a duration
-    would be counted from the wrong instant.
-    """
+def _reset_moment(error: urllib.error.HTTPError) -> dt.datetime | None:
+    """When the spent limit lifts, in UTC, or None when the header is absent or unusable."""
     header = error.headers.get('x-ratelimit-reset') if error.headers else None
     try:
-        moment = dt.datetime.fromtimestamp(int(header or ''), tz=dt.UTC)
+        return dt.datetime.fromtimestamp(int(header or ''), tz=dt.UTC)
     except (TypeError, ValueError, OSError, OverflowError):
-        return ''
-    return f'; resets at {moment:%H:%M} UTC'
+        return None
 
 
 def _quote(ref: str) -> str:

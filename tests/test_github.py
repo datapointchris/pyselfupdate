@@ -17,6 +17,7 @@ import pytest
 
 from pyselfupdate.config import Config
 from pyselfupdate.errors import NoReleaseError
+from pyselfupdate.errors import RateLimitedError
 from pyselfupdate.errors import SourceError
 from pyselfupdate.github import GitHubSource
 from pyselfupdate.github import token_from_env
@@ -235,13 +236,6 @@ def test_a_404_reads_as_no_release_or_private(server: Recorder) -> None:
         source().latest_release()
 
 
-def test_an_exhausted_rate_limit_says_so(server: Recorder) -> None:
-    server.routes['/repos/datapointchris/demo/releases/latest'] = (403, {'message': 'rate limit'})
-
-    with pytest.raises(SourceError, match='rate limit'):
-        source().latest_release()
-
-
 def test_no_matching_prefix_is_no_release(server: Recorder) -> None:
     server.routes['/repos/datapointchris/demo/releases?per_page=100'] = (
         200,
@@ -405,25 +399,16 @@ def test_the_command_runs_once_per_source(server: Recorder, monkeypatch: pytest.
     assert calls == 1
 
 
-def test_an_anonymous_rate_limit_names_the_anonymous_ceiling(server: Recorder) -> None:
-    """The two ceilings are different problems with different fixes. One
-    sentence for both misadvised whichever case it was not written for."""
+@pytest.mark.parametrize(('token', 'authenticated'), [('', False), ('secret', True)])
+def test_a_spent_rate_limit_says_which_ceiling(server: Recorder, token: str, authenticated: bool) -> None:
+    """The two ceilings are different problems with different fixes: a token
+    lifts the anonymous one, and nothing lifts the authenticated one but time."""
     server.routes['/repos/datapointchris/demo/releases/latest'] = (403, {'message': 'rate limit'})
 
-    with pytest.raises(SourceError, match='anonymous rate limit'):
-        source().latest_release()
+    with pytest.raises(RateLimitedError) as raised:
+        source(token=token).latest_release()
 
-
-def test_an_authenticated_rate_limit_does_not_advise_supplying_a_token(server: Recorder) -> None:
-    """Telling someone to set a token when the request already carried one reads
-    as advice to configure something that is already configured."""
-    server.routes['/repos/datapointchris/demo/releases/latest'] = (403, {'message': 'rate limit'})
-
-    with pytest.raises(SourceError) as raised:
-        source(token='secret').latest_release()
-
-    assert 'authenticated rate limit' in str(raised.value)
-    assert 'GITHUB_TOKEN' not in str(raised.value)
+    assert raised.value.authenticated is authenticated
 
 
 def test_a_bearer_does_not_follow_a_redirect_off_its_origin(monkeypatch: pytest.MonkeyPatch) -> None:

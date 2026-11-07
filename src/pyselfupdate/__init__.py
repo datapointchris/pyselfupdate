@@ -24,7 +24,9 @@ from pyselfupdate.errors import LocalInstallError
 from pyselfupdate.errors import LockUnreadableError
 from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.errors import NotInstalledError
+from pyselfupdate.errors import RateLimitedError
 from pyselfupdate.errors import SelfUpdateError
+from pyselfupdate.errors import SelfUpdateSourceFailure
 from pyselfupdate.errors import SourceError
 from pyselfupdate.github import GitHubSource
 from pyselfupdate.install import Installation
@@ -59,9 +61,11 @@ __all__ = [
     'NoReleaseError',
     'NotInstalledError',
     'Outcome',
+    'RateLimitedError',
     'Release',
     'Result',
     'SelfUpdateError',
+    'SelfUpdateSourceFailure',
     'Skip',
     'Source',
     'SourceError',

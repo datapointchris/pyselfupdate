@@ -1,9 +1,14 @@
 """Exceptions raised by pyselfupdate.
 
 Every failure mode has its own class so callers match on a type rather than on
-message text. The hierarchy is one level deep under `SelfUpdateError`, which is
-what a caller catches when it does not care why an update did not happen.
+message text. Every class derives from `SelfUpdateError`, which is what a caller
+catches when it does not care why an update did not happen. A class that narrows
+another derives from it, so catching `SourceError` still catches a rate limit.
 """
+
+from __future__ import annotations
+
+import datetime as dt
 
 
 class SelfUpdateError(Exception):
@@ -39,6 +44,31 @@ class NoReleaseError(SelfUpdateError):
 
 class SourceError(SelfUpdateError):
     """The release source could not be reached or returned something unusable."""
+
+
+class SelfUpdateSourceFailure(SourceError):
+    """A transport or protocol failure, as opposed to a missing release.
+
+    Distinct from NoReleaseError so a caller can tell "GitHub is unreachable"
+    apart from "this repository has published nothing", which are the same HTTP
+    status for a private repository and want different messages.
+    """
+
+
+class RateLimitedError(SelfUpdateSourceFailure):
+    """The source's rate limit for this caller is spent.
+
+    `authenticated` says which ceiling was hit. Without a credential the limit
+    is shared by every host behind one address, and supplying a token lifts it.
+    With one, nothing is left to configure, and the caller can only wait.
+    `resets_at` is when the ceiling lifts, in UTC, or None when the response
+    did not say.
+    """
+
+    def __init__(self, message: str, *, authenticated: bool, resets_at: dt.datetime | None = None) -> None:
+        super().__init__(message)
+        self.authenticated = authenticated
+        self.resets_at = resets_at
 
 
 class InstallFailedError(SelfUpdateError):
