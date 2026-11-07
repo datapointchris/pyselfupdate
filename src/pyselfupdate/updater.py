@@ -60,9 +60,9 @@ class Result:
 def check(config: Config) -> Result:
     """Report whether a newer release exists, without installing anything.
 
-    Compares versions and reads nothing else. A branch build's version can rank
-    below the release it is ahead of, so a caller reporting the result runs
+    Compares versions and reads nothing else. A caller reporting the result runs
     `require_updatable` first, as `update` and `typercmd.run_update` do.
+    `installed_from_release` says why a version alone cannot decide.
     """
     resolved = config.resolved()
     current = _current_version(resolved)

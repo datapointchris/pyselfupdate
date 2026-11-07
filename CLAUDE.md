@@ -130,14 +130,11 @@ or a local path. That is strictly better than inferring it at runtime: the
 installer knows how the tool got there and the running program does not. Two
 kinds are refused — `LOCAL` (a path or editable checkout), and `GIT` whose
 `rev=` is not `tag_prefix` followed by a semantic version (a branch or a commit,
-so its version says nothing about how far behind it is). uv writes `rev=` for
-whatever followed the `@`. `@main` lands in the same field as `@v1.2.3`, so
-only the value tells them apart. `updater.installed_from_release` is the one
-copy of that rule. `update`, `update --check` and the notify gate all reach it.
-
-A version check cannot stand in for the receipt. A branch build versioned from
-git tags reports `1.2.3-post.3+<sha>`. That is valid semver, and it ranks below
-the `v1.2.3` it is ahead of. Comparing it offers the older release as an update.
+so its version says nothing about how far behind it is).
+`updater.installed_from_release` is the one copy of that rule, and of why a
+version check cannot stand in for the receipt. `update`, `update --check` and
+the notify gate all reach it. `install._split_git` shows how uv spells each
+`rev=`.
 
 Failing closed matters here: a tool that cannot be identified is treated as
 local and never nagged.

@@ -72,10 +72,9 @@ class Installation:
     kind: InstallKind
     url: str = ''
 
-    # Whatever followed the `@` at install time: a tag, a branch or a commit,
-    # which uv records alike as `rev=`. Empty when the install follows the
-    # default branch. `updater.installed_from_release` reads it as a release
-    # tag or refuses it.
+    # Whatever followed the `@` at install time, read from the receipt by
+    # `_split_git`. `updater.installed_from_release` reads it as a release tag
+    # or refuses it.
     revision: str = ''
 
     extras: tuple[str, ...] = ()
