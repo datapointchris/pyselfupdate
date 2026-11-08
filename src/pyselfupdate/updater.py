@@ -213,9 +213,9 @@ def _require_updatable(installation: Installation, tag_prefix: str) -> None:
             f'so a release version cannot be compared against it; '
             f'reinstall from a tagged release to enable updates'
         )
-    if installation._unrebuildable:
+    if installation.unrebuildable:
         raise NotInstalledError(
-            f'{installation.tool} was installed with {", ".join(installation._unrebuildable)}, '
+            f'{installation.tool} was installed with {", ".join(installation.unrebuildable)}, '
             f'which an update cannot pass back to uv and would drop. '
             f'Reinstall {installation.tool} by hand with `uv tool install --force`'
         )

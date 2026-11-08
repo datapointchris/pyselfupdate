@@ -93,7 +93,7 @@ class Installation:
     # `read_installation` records them rather than raising: the notify gate
     # treats a failed read as a local install and prints no notice. `update`
     # raises NotInstalledError on them instead of dropping them.
-    _unrebuildable: tuple[str, ...] = field(default=(), repr=False)
+    unrebuildable: tuple[str, ...] = field(default=(), repr=False)
 
 
 def tool_dir() -> Path:
