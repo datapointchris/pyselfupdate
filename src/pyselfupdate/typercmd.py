@@ -101,12 +101,14 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
 
     if not result.update_available:
         typer.echo(f'✓ {tool} already at latest: {result.latest}')
+        _echo_warnings(tool, result.index_warning)
         return
 
     subjects = [] if skip_changelog else changelog(config, result.current, result.latest)
 
     if check_only:
         typer.echo(f'✓ {tool} update available: {result.current} → {result.latest}')
+        _echo_warnings(tool, result.index_warning)
         _echo_changes(subjects)
         return
 
@@ -117,10 +119,15 @@ def run_update(config: Config, *, check_only: bool = False, skip_changelog: bool
         raise typer.Exit(1) from error
 
     typer.echo(f'✓ {tool} updated: {result.current} → {result.latest}')
-    if installed.lock_warning:
-        typer.echo(f'! {tool}: {installed.lock_warning}', err=True)
+    _echo_warnings(tool, installed.lock_warning, installed.index_warning)
     _echo_changes(subjects)
     exit_now()
+
+
+def _echo_warnings(tool: str, *warnings: str) -> None:
+    for warning in warnings:
+        if warning:
+            typer.echo(f'! {tool}: {warning}', err=True)
 
 
 def _echo_changes(subjects: list[str]) -> None:

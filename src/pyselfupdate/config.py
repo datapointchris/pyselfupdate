@@ -46,7 +46,10 @@ class Config:
     # invocations where the notify gate declines to check.
     token_func: Callable[[], str] | None = None
 
+    # Seconds that each read a check makes may take: the release source's
+    # request, and for an index install uv's read of the package index.
     timeout: float = DEFAULT_TIMEOUT
+
     allow_prerelease: bool = False
 
     # Selects one release stream in a repository publishing several, as in

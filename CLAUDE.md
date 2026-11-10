@@ -24,7 +24,7 @@ shared across all three, so a rename in one breaks the other two. They do
 | `version.py` | Semantic version comparison, replacing `packaging` |
 | `source.py` | The `Source` protocol and `Release` |
 | `github.py` | `GitHubSource`, over `urllib` |
-| `install.py` | Reading uv's receipt, reading a tag's `uv.lock`, running `uv tool install`, re-exec |
+| `install.py` | Reading uv's receipt, reading a tag's `uv.lock`, asking uv what an index serves, running `uv tool install`, re-exec |
 | `updater.py` | `check`, `update`, `changelog` |
 | `notifier.py` | The gate, the interval, the notice |
 | `state.py` | The shared `autoupdate-<machine>.json` schema, and the machine derivation that names it |
@@ -46,8 +46,9 @@ caller uses it. That function is where a timeout or a test stub attaches, once.
 - **Subprocesses** go through `install.run_command`, which takes the bound per
   call. `github.token_from_command` passes `COMMAND_TIMEOUT_SECONDS`, and
   `install.read_lock` passes `LOCK_READ_TIMEOUT_SECONDS` to its clone and its
-  export. `install.run_install` passes none, because an install killed part
-  way leaves the environment half rewritten.
+  export. `install.read_index_latest` passes `Config.timeout`, because the
+  notify gate runs it. `install.run_install` passes none, because an install
+  killed part way leaves the environment half rewritten.
 - **The state file** is written only by `state.write`, by rename so a reader
   never sees half a file. The clone `read_lock` reads, and the pin and
   requirement files `run_install` hands to uv, live in a temporary directory
@@ -73,10 +74,11 @@ caller uses it. That function is where a timeout or a test stub attaches, once.
 
   What it would buy does not reach here. This package's own code makes one
   HTTP request, to `api.github.com`, for JSON. Every other fetch is a
-  subprocess: `install.run_install` runs `uv tool install --force` and
-  `install.read_lock` runs `git clone`. So there is no CDN redirect for a token
-  to leak into, and nothing needs a client object, connection reuse or
-  streaming. Revisit if a second HTTP need appears — at that point the closure
+  subprocess: `install.run_install` runs `uv tool install --force`,
+  `install.read_lock` runs `git clone`, and `install.read_index_latest` runs
+  `uv pip compile`, which reads a package index with uv's own configuration
+  and credentials. So there is no CDN redirect for a token to leak into, and
+  nothing needs a client object, connection reuse or streaming. Revisit if a second HTTP need appears — at that point the closure
   is buying something.
 - **typer stays confined to `typercmd.py`,** installed via the `typer` extra. A
   library keeps its dependencies off its consumers' surface, so a caller using

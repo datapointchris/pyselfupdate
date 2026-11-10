@@ -10,7 +10,9 @@ release exists. `update` installs that release when the user asks.
 `uv tool upgrade` re-resolves the requirement a tool was installed with, so a
 tool installed at a release tag stays at that tag. `update` asks the release
 source which tag is newest and reinstalls at that tag. A git install is held to
-that tag's `uv.lock`.
+that tag's `uv.lock`. A tool installed from a package index is offered only the
+version its index serves, which can trail a release whose upload has not
+finished.
 
 The package has no runtime dependencies. It uses `urllib` for the network,
 `tomllib` for uv's receipt and lock, and its own semver implementation. CI
@@ -71,13 +73,15 @@ A private repository needs a credential. `gh auth login` is enough, because
 the check runs `gh auth token` by default.
 
 **When the notice never appears, run `mytool update --check` first.** It runs
-the two steps that can fail, reading uv's receipt and asking the release
-source, and prints what stopped it. The notice stays silent on both. Every
-other reason it stays silent is in the table under `notify`.
+the steps that can fail and prints what stopped it. Those are reading uv's
+receipt, asking the release source and, for an index install, asking its
+index. The notice stays silent on each. Every other reason it stays silent is
+in the table under `notify`.
 
 ## `notify` — one line after the command's output, never an error
 
-Once per 24 hours, when a newer release exists, one line goes to stderr:
+Once per 24 hours, when a newer release can be installed, one line goes to
+stderr:
 
 ```text
 mytool v1.4.0 available (running v1.3.2) — run `mytool update`
@@ -131,17 +135,18 @@ from pyselfupdate import Config, check, require_updatable
 config = Config(tool='mytool', owner='you')
 
 require_updatable(config)  # reads uv's receipt; raises on an install update refuses
-result = check(config)  # one request to the release source
+result = check(config)  # asks the release source, and an index install's index
 if result.update_available:
     print(result.current, '->', result.latest)
 ```
 
-`check` compares the running version with the newest release, and reads
-nothing else. A branch build's version can rank below the release it is ahead
-of. Three commits past `v1.2.3`, a tool versioned from git tags builds as
-`1.2.3-post.3+<commit>`, which semver ranks below `v1.2.3`. So call
-`require_updatable` before reporting what `check` found. It refuses every
-install `update` refuses.
+`check` compares the running version with the newest version an update can
+install. It reads uv's receipt to learn where that version comes from, and
+refuses nothing the receipt describes. A branch build's version can rank below
+the release it is ahead of. Three commits past `v1.2.3`, a tool versioned from
+git tags builds as `1.2.3-post.3+<commit>`, which semver ranks below `v1.2.3`.
+So call `require_updatable` before reporting what `check` found. It refuses
+every install `update` refuses.
 
 The typer extra carries the whole command. `add_update_command(app, config)`
 registers `mytool update`. `run_update(config, check_only=...)` is the same
@@ -183,6 +188,7 @@ caller matches a type rather than message text:
 | `SelfUpdateSourceFailure` | A `SourceError` from a transport or protocol failure, as opposed to a missing release |
 | `RateLimitedError` | A `SelfUpdateSourceFailure` for a spent rate limit. `authenticated` says which ceiling, and `resets_at` when it lifts, or None |
 | `LockUnreadableError` | The release's `uv.lock` could not be read, so nothing was installed |
+| `IndexUnreadableError` | uv could not say which version an index install's package index serves, so nothing was offered |
 | `InstallFailedError` | `uv tool install` ran and failed, or uv is not on `PATH` |
 
 ### A git install is held to the release's `uv.lock`
@@ -200,11 +206,6 @@ later `uv tool upgrade` stays held to them.
 | Carries none | Installs unlocked and sets `lock_missing`. `lock_warning` names the tag, and `run_update` and `update_and_reexec` print it |
 | Will not clone, uv will not export its lock, or git or uv is not on `PATH` | Raises `LockUnreadableError` and installs nothing |
 
-An install from an index reads no lock, because a wheel carries none. It
-takes the release as a floor, `mytool>=2.0.0`, rather than a pin. uv records
-the specifier in the receipt, and `uv tool upgrade` refuses to move an exact
-pin.
-
 An update reinstalls the tool's own extras, as in `mytool[fast]`, with their
 dependencies held to the lock. Every `--with` and `--with-editable`
 requirement is passed back to uv as well.
@@ -219,6 +220,26 @@ alone and is not found. An `explicit` index is left out, because only a config
 file can declare one and the reinstall reads that file again. Dropping any
 other recorded option changes how the tool resolves or builds, never whether it
 is found.
+
+### An index install is offered only what its index serves
+
+A release exists on GitHub before its upload to the package index finishes,
+and stays there when the upload fails. So for an index install `check` asks
+the index too, through uv. It runs `uv pip compile --no-deps` on the tool's
+name with the flags above, so uv reads the index with the configuration and
+credentials the reinstall uses. The version uv names becomes `latest`, and
+`index_latest` holds it.
+
+| The index serves | What `check` reports |
+| --- | --- |
+| The newest release | `latest` is that release |
+| Another version | `latest` is the index's version, or `current` when that is not newer. `index_warning` names both versions, and `run_update` and `update_and_reexec` print it |
+| Nothing uv can read within `Config.timeout` seconds | Raises `IndexUnreadableError` |
+
+An install from an index reads no lock, because a wheel carries none. It
+takes the index's version as a floor, `mytool>=2.0.0`, rather than a pin. uv
+records the specifier in the receipt, and `uv tool upgrade` refuses to move an
+exact pin.
 
 ## What may be updated is read from uv's receipt, not guessed from the version
 
@@ -258,7 +279,7 @@ config = Config(
     version='1.2.3',  # defaults to that distribution's installed metadata
     token='',  # see Authentication below; you almost certainly want the default
     token_func=None,  # a source of your own, tried before $GITHUB_TOKEN_COMMAND
-    timeout=10.0,  # seconds, per request
+    timeout=10.0,  # seconds per read: the release source's, and uv's read of an index
     tag_prefix='',  # 'cli/' for tags like cli/v1.2.3
     allow_prerelease=False,
     source=None,  # a custom Source; defaults to a GitHubSource built from the fields above

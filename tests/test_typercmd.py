@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 import typer
+from conftest import StubIndex
 from conftest import StubLock
 from conftest import StubSource
 
@@ -21,6 +22,7 @@ from pyselfupdate import updater as update_module
 from pyselfupdate.errors import InstallFailedError
 from pyselfupdate.errors import LockUnreadableError
 from pyselfupdate.install import Pins
+from pyselfupdate.source import Release
 from pyselfupdate.typercmd import run_update
 from pyselfupdate.updater import Result
 
@@ -187,6 +189,21 @@ def test_a_locked_update_prints_no_warning(pinned, installs, exits, capsys) -> N
     run_update(config(RecordingSource([])))
 
     assert capsys.readouterr().err == ''
+
+
+def test_an_index_behind_the_release_installs_nothing_and_names_both_versions(
+    make_receipt, installs, exits, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The release's upload has not reached the index, so the index's 1.0.0 is the newest that installs."""
+    make_receipt('demo', '{ name = "demo" }')
+    monkeypatch.setattr(update_module, 'read_index_latest', StubIndex(version='1.0.0'))
+    lagging = Result(current='v1.0.0', latest='v1.0.0', release=Release(tag='v2.0.0'), index_latest='v1.0.0')
+
+    run_update(config(RecordingSource([])))
+
+    assert not installs
+    assert not exits
+    assert capsys.readouterr() == (f'✓ demo already at latest: {lagging.latest}\n', f'! demo: {lagging.index_warning}\n')
 
 
 def test_an_unreadable_lock_exits_non_zero_having_installed_nothing(pinned, installs, exits, lock: StubLock) -> None:

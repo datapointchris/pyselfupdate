@@ -18,6 +18,7 @@ import pytest
 
 from pyselfupdate import state
 from pyselfupdate.errors import NoReleaseError
+from pyselfupdate.install import Installation
 from pyselfupdate.install import Pins
 from pyselfupdate.source import Release
 
@@ -84,6 +85,19 @@ class StubLock:
         if self.error is not None:
             raise self.error
         return self.pins
+
+
+@dataclass
+class StubIndex:
+    """Stands in for `read_index_latest`, which runs uv against an index install's package index.
+
+    `test_lock.py` drives the real one against an index on disk.
+    """
+
+    version: str = '2.0.0'
+
+    def __call__(self, installation: Installation, *, timeout: float, allow_prerelease: bool = False) -> str:
+        return self.version
 
 
 @pytest.fixture(autouse=True)

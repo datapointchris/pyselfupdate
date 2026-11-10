@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import StubIndex
 from conftest import StubLock
 from conftest import StubSource
 
@@ -34,6 +35,13 @@ from pyselfupdate.updater import update_and_reexec
 def lock(monkeypatch: pytest.MonkeyPatch) -> StubLock:
     stub = StubLock()
     monkeypatch.setattr(update_module, 'read_lock', stub)
+    return stub
+
+
+@pytest.fixture(autouse=True)
+def index(monkeypatch: pytest.MonkeyPatch) -> StubIndex:
+    stub = StubIndex()
+    monkeypatch.setattr(update_module, 'read_index_latest', stub)
     return stub
 
 
@@ -99,12 +107,6 @@ def test_check_treats_an_older_release_as_no_update(pinned) -> None:
     result = check(config(StubSource(tag='v0.9.0'), version='2.0.0'))
 
     assert not result.update_available
-
-
-def test_check_never_touches_the_filesystem(pinned, uv_tools) -> None:
-    """It is the cheap half of the API, and notify calls it on a hot path."""
-    result = check(config(StubSource(tag='v2.0.0')))
-    assert result.update_available
 
 
 def test_a_non_semver_tag_is_rejected(pinned) -> None:

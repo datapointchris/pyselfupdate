@@ -200,10 +200,12 @@ def test_an_update_keeps_the_tools_extras_and_what_was_installed_beside_it(tmp_p
     assert (after.extras, after.with_requirements) == (before.extras, before.with_requirements)
 
 
-def test_an_index_install_updates_from_its_index_and_stays_upgradeable(
+def test_an_index_install_updates_to_what_its_index_serves_and_stays_upgradeable(
     tmp_path: Path, offline: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The index reaches uv only as the first install's `--index`, not from the environment."""
+    """The source names v3.0.0 while the index holds 2.0.0, as when a release's
+    upload has not finished. The index reaches uv only as the first install's
+    `--index`, not from the environment."""
     monkeypatch.delenv('UV_NO_INDEX')
     monkeypatch.delenv('UV_FIND_LINKS')
     index = tmp_path / 'simple'
@@ -212,7 +214,8 @@ def test_an_index_install_updates_from_its_index_and_stays_upgradeable(
     publish(index, 'idxtool', '2.0.0')
     tools = tmp_path / 'tools'
 
-    update(Config(tool='idxtool', version='1.0.0', source=StubSource(tag='v2.0.0')))
+    result = update(Config(tool='idxtool', version='1.0.0', source=StubSource(tag='v3.0.0')))
+    assert (result.latest, result.index_latest) == ('v2.0.0', 'v2.0.0')
     assert installed(tools, 'idxtool', 'idxtool') == '2.0.0'
 
     publish(index, 'idxtool', '3.0.0')

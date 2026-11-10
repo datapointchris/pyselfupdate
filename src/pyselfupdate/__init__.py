@@ -18,6 +18,7 @@ lives in `pyselfupdate.typercmd` and is installed with the `typer` extra.
 """
 
 from pyselfupdate.config import Config
+from pyselfupdate.errors import IndexUnreadableError
 from pyselfupdate.errors import InstallFailedError
 from pyselfupdate.errors import InvalidConfigError
 from pyselfupdate.errors import LocalInstallError
@@ -52,6 +53,7 @@ from pyselfupdate.updater import update_and_reexec
 __all__ = [
     'Config',
     'GitHubSource',
+    'IndexUnreadableError',
     'InstallFailedError',
     'InstallKind',
     'Installation',

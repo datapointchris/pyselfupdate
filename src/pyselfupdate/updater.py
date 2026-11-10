@@ -13,6 +13,7 @@ from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.errors import NotInstalledError
 from pyselfupdate.install import Installation
 from pyselfupdate.install import InstallKind
+from pyselfupdate.install import read_index_latest
 from pyselfupdate.install import read_installation
 from pyselfupdate.install import read_lock
 from pyselfupdate.install import reexec
@@ -30,16 +31,24 @@ class Result:
     current: str
 
     # The version now installed, or the one `update` would install after a
-    # `check`. Equals `current` when nothing is newer.
+    # `check`. Equals `current` when nothing newer can be installed. An index
+    # install takes it from `index_latest` rather than from `release`.
     latest: str
 
     applied: bool = False
+
+    # The newest release the source names, whether or not it is newer.
     release: Release | None = None
+
     metadata: dict[str, str] = field(default_factory=dict)
 
     # True when a git install ran unlocked because its tag carries no uv.lock.
     # An index install reads no lock, so it leaves this False.
     lock_missing: bool = False
+
+    # For an index install, the newest version its package index serves,
+    # canonicalized. Empty for any other install, which takes the release's tag.
+    index_latest: str = ''
 
     @property
     def update_available(self) -> bool:
@@ -56,26 +65,53 @@ class Result:
         tag = self.release.install_ref() if self.release else self.latest
         return f'{tag} has no uv.lock, so its dependencies were installed at their newest versions'
 
+    @property
+    def index_warning(self) -> str:
+        """A line naming both versions when the index serves other than the newest release, else an empty string.
+
+        `run_update` and `update_and_reexec` print it to stderr.
+        """
+        if not self.index_latest or self.release is None:
+            return ''
+        released = semver.canonical(self.release.tag)
+        if self.index_latest == released:
+            return ''
+        return f'the newest release is {released}, but the package index holds {self.index_latest}'
+
 
 def check(config: Config) -> Result:
-    """Report whether a newer release exists, without installing anything.
+    """Report whether a newer version can be installed, without installing anything.
 
-    Compares versions and reads nothing else. A caller reporting the result runs
+    Reads uv's receipt to learn where an update would come from. A git install
+    takes the source's newest release, whose tag exists once the release does.
+    An index install takes the newest version its index serves, which
+    `read_index_latest` asks uv for: a release can exist before its upload
+    finishes, and stays when the upload fails.
+
+    Raises `NotInstalledError` when the receipt cannot be read, and refuses no
+    install the receipt describes. A caller reporting the result runs
     `require_updatable` first, as `update` and `typercmd.run_update` do.
     `installed_from_release` says why a version alone cannot decide.
     """
     resolved = config.resolved()
     current = _current_version(resolved)
+    installation = read_installation(resolved.tool)
 
     release = resolved.require_source().latest_release()
     latest = semver.canonical(release.tag)
     if not semver.is_valid(latest):
         raise NoReleaseError(f'tag {release.tag!r} is not a semantic version')
 
-    if semver.compare(latest, current) <= 0:
-        return Result(current=current, latest=current)
+    index_latest = ''
+    if installation.kind is InstallKind.INDEX:
+        served = read_index_latest(installation, timeout=resolved.timeout, allow_prerelease=resolved.allow_prerelease)
+        index_latest = latest = semver.canonical(served)
+        if not semver.is_valid(index_latest):
+            raise NoReleaseError(f'the package index serves {resolved.tool} {served}, which is not a semantic version')
 
-    return Result(current=current, latest=latest, release=release)
+    if semver.compare(latest, current) <= 0:
+        latest = current
+    return Result(current=current, latest=latest, release=release, index_latest=index_latest)
 
 
 def require_updatable(config: Config) -> Installation:
@@ -124,12 +160,16 @@ def install_release(config: Config, result: Result, installation: Installation, 
     A git install is held to the `uv.lock` at the release's tag. A tag without
     one installs unlocked and comes back with `lock_missing` set. A lock that
     cannot be read raises `LockUnreadableError` before anything is installed.
+    An index install takes `latest`, the version its index serves, as a floor.
     """
     if not result.update_available or result.release is None:
         return result
 
-    ref = result.release.install_ref()
-    pins = read_lock(installation.url, ref, extras=installation.extras) if installation.kind is InstallKind.GIT else None
+    if installation.kind is InstallKind.GIT:
+        ref = result.release.install_ref()
+        pins = read_lock(installation.url, ref, extras=installation.extras)
+    else:
+        ref, pins = result.latest, None
     run_install(
         requirement_for(installation, ref),
         quiet=quiet,
@@ -144,6 +184,7 @@ def install_release(config: Config, result: Result, installation: Installation, 
         applied=True,
         release=result.release,
         lock_missing=installation.kind is InstallKind.GIT and pins is None,
+        index_latest=result.index_latest,
     )
 
 
@@ -166,12 +207,13 @@ def update_and_reexec(config: Config, *, quiet: bool = True) -> Result:
 
     Returns normally only when nothing was installed; otherwise it does not
     return at all. The caller never sees the `Result` of an install, so this
-    writes its `lock_warning` to stderr before the re-exec.
+    writes its `lock_warning` and `index_warning` to stderr before the re-exec.
     """
     result = update(config, quiet=quiet)
     if result.applied:
-        if result.lock_warning:
-            print(f'! {config.tool}: {result.lock_warning}', file=sys.stderr)
+        for warning in (result.lock_warning, result.index_warning):
+            if warning:
+                print(f'! {config.tool}: {warning}', file=sys.stderr)
         reexec()
     return result
 

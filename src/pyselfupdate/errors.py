@@ -82,3 +82,12 @@ class LockUnreadableError(SelfUpdateError):
     refuses the lock. A tag with no `uv.lock` at all is not this error: it
     installs unlocked and sets `Result.lock_missing`.
     """
+
+
+class IndexUnreadableError(SelfUpdateError):
+    """uv could not say which version of an index-installed tool its package index serves.
+
+    Raised when uv is not on PATH, takes longer than `Config.timeout`, cannot
+    reach the index, or finds no version of the tool there. Nothing is offered,
+    because a version the index does not serve cannot be installed.
+    """

@@ -30,6 +30,7 @@ from importlib.metadata import version as installed_version
 from itertools import chain
 from pathlib import Path
 
+from pyselfupdate.errors import IndexUnreadableError
 from pyselfupdate.errors import InstallFailedError
 from pyselfupdate.errors import LockUnreadableError
 from pyselfupdate.errors import NotInstalledError
@@ -275,6 +276,50 @@ def current_version(package: str) -> str:
         return ''
 
 
+INDEX_READ = ('pip', 'compile', '-', '--no-deps', '--no-header', '--no-annotate', '--quiet')
+"""Resolves the requirement read from stdin, and only it, printing `<name>==<version>`."""
+
+
+def read_index_latest(installation: Installation, *, timeout: float, allow_prerelease: bool = False) -> str:
+    """The newest version of an index-installed tool that its package index serves, as uv prints it.
+
+    A release can exist before its upload to the index finishes, and stays when
+    the upload fails, so the release source cannot say what an index install
+    can take. uv resolves the tool's name alone, with the receipt's package
+    sources, and reads the index through the configuration and credentials the
+    reinstall uses. The receipt's `--python` is passed back too, so a release
+    that has dropped that Python is not offered. With none recorded, uv
+    resolves for the running interpreter.
+
+    The read is bounded by `timeout`, since the notify gate runs it before the
+    command someone typed returns. Raises `IndexUnreadableError` when uv is not
+    on PATH, outlasts the bound, or names no version.
+    """
+    uv = shutil.which('uv')
+    if not uv:
+        raise IndexUnreadableError(
+            f'uv is not on PATH, so the versions of {installation.tool} its package index serves cannot be read. '
+            'Add the directory holding uv to PATH, then check again'
+        )
+    python = () if '--python' in installation.source_flags else ('--python', sys.executable)
+    prerelease = ('--prerelease', 'allow') if allow_prerelease else ()
+    command = [uv, *INDEX_READ, *installation.source_flags, *python, *prerelease]
+    try:
+        resolved = run_command(command, stdin=f'{installation.tool}\n', timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        raise IndexUnreadableError(
+            f'reading which version of {installation.tool} its package index serves took longer than {error.timeout:g}s'
+        ) from error
+    if resolved.returncode != 0:
+        raise IndexUnreadableError(f'uv could not read which version of {installation.tool} its package index serves: {_reason(resolved)}')
+    pinned = [line.split(';', 1)[0].partition('==')[2].strip() for line in resolved.stdout.splitlines() if '==' in line]
+    if len(pinned) != 1 or not pinned[0]:
+        raise IndexUnreadableError(
+            f'uv resolved {installation.tool} from its package index to {resolved.stdout.strip()!r}, which names no one version'
+        )
+    return pinned[0]
+
+
 def requirement_for(installation: Installation, ref: str) -> str:
     """The requirement string that installs `ref` of an already-installed tool, with the extras it has.
 
@@ -467,14 +512,16 @@ def run_install(
         raise InstallFailedError(f'uv tool install failed: {_reason(completed)}')
 
 
-def run_command(command: list[str], *, cwd: Path | None = None, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
+def run_command(
+    command: list[str], *, cwd: Path | None = None, timeout: float | None = None, stdin: str | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run a program to completion and capture what it printed.
 
     Every process this package starts goes through here. `timeout` bounds the call in seconds. Past it the program is killed and
     `subprocess.TimeoutExpired` is raised, which each caller turns into its own
-    failure. None runs unbounded.
+    failure. None runs unbounded. `stdin` is written to the program's standard input.
     """
-    return subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False, timeout=timeout)
+    return subprocess.run(command, cwd=cwd, input=stdin, capture_output=True, text=True, check=False, timeout=timeout)
 
 
 def _reason(completed: subprocess.CompletedProcess[str]) -> str:

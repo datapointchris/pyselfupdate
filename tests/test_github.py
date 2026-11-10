@@ -254,8 +254,11 @@ def test_no_matching_prefix_is_no_release(server: Recorder) -> None:
         ('', '1.1.0', '1.0.0...1.1.0'),
     ],
 )
-def test_changelog_compares_the_tags_the_repository_holds(server: Recorder, tag_prefix: str, latest_tag: str, compared: str) -> None:
+def test_changelog_compares_the_tags_the_repository_holds(
+    server: Recorder, make_receipt, tag_prefix: str, latest_tag: str, compared: str
+) -> None:
     """`check` reports versions with a `v` and no prefix, and a stream's tags may differ in both."""
+    make_receipt('demo', f'{{ name = "demo", git = "https://github.com/datapointchris/demo.git?rev={tag_prefix}v1.0.0" }}')
     server.routes['/repos/datapointchris/demo/releases/latest'] = (200, {'tag_name': latest_tag})
     server.routes['/repos/datapointchris/demo/releases?per_page=100'] = (200, [{'tag_name': latest_tag}])
     server.routes[f'/repos/datapointchris/demo/compare/{compared}'] = (
