@@ -78,8 +78,8 @@ caller uses it. That function is where a timeout or a test stub attaches, once.
   `install.read_lock` runs `git clone`, and `install.read_index_latest` runs
   `uv pip compile`, which reads a package index with uv's own configuration
   and credentials. So there is no CDN redirect for a token to leak into, and
-  nothing needs a client object, connection reuse or streaming. Revisit if a second HTTP need appears — at that point the closure
-  is buying something.
+  nothing needs a client object, connection reuse or streaming. Revisit if a
+  second HTTP need appears — at that point the closure is buying something.
 - **typer stays confined to `typercmd.py`,** installed via the `typer` extra. A
   library keeps its dependencies off its consumers' surface, so a caller using
   argparse or click never installs typer. The extra is what Python needs to get
@@ -148,11 +148,12 @@ against a local `http.server` for the wire — is how a network client is tested
 offline against a stub, plus one test against a local server. Everything runs
 offline.
 
-The install has the same two layers. `StubLock` stands in for `read_lock` in the
-updater and typercmd tests. `test_lock.py` runs real git and real uv against
-repositories, a wheel directory and an index it builds under tmp, with uv
-offline and every tool directory redirected there. No other test shows what the
-pins and the receipt's source flags do to an install.
+The install has the same two layers. `StubLock` stands in for `read_lock`, and
+`StubIndex` for `read_index_latest`, in the updater and typercmd tests.
+`test_lock.py` runs real git and real uv against repositories, a wheel
+directory and an index it builds under tmp, with uv offline and every tool
+directory redirected there. No other test shows what the pins, the receipt's
+source flags and uv's read of the index do to an install.
 
 **Terminal detection is injected, never faked by reassigning `sys.stdout`.**
 pytest's capture reinstalls its own streams between fixture setup and the test
