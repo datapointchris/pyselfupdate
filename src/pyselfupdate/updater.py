@@ -167,7 +167,9 @@ def install_release(config: Config, result: Result, installation: Installation, 
 
     if installation.kind is InstallKind.GIT:
         ref = result.release.install_ref()
-        pins = read_lock(installation.url, ref, extras=installation.extras)
+        pins = read_lock(
+            installation.url, ref, extras=installation.extras, package=installation.tool, subdirectory=installation.subdirectory
+        )
     else:
         ref, pins = result.latest, None
     run_install(

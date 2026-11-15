@@ -44,6 +44,15 @@ def test_reads_a_pinned_git_install(make_receipt) -> None:
     )
 
 
+def test_a_workspace_member_reinstalls_from_its_subdirectory(make_receipt) -> None:
+    """uv records `#subdirectory=` in the query. Dropped, the update would install the workspace root, which holds no project."""
+    make_receipt('mytool', '{ name = "mytool", git = "https://github.com/x/mono.git?subdirectory=cli&rev=v1.0.0" }')
+
+    installation = read_installation('mytool')
+    assert installation.subdirectory == 'cli'
+    assert requirement_for(installation, 'v1.1.0') == 'mytool @ git+https://github.com/x/mono.git@v1.1.0#subdirectory=cli'
+
+
 def test_reads_a_branch_tracking_git_install(make_receipt) -> None:
     """No `rev=` means the install follows the default branch.
 

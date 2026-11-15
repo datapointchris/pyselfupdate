@@ -77,7 +77,7 @@ class StubLock:
     error: Exception | None = None
     reads: list[tuple[str, str, tuple[str, ...]]] = field(default_factory=list)
 
-    def __call__(self, url: str, ref: str, *, extras: tuple[str, ...] = ()) -> Pins | None:
+    def __call__(self, url: str, ref: str, *, extras: tuple[str, ...] = (), package: str = '', subdirectory: str = '') -> Pins | None:
         self.reads.append((url, ref, tuple(extras)))
         if self.error is not None:
             raise self.error

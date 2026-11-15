@@ -78,6 +78,10 @@ class Installation:
     # or refuses it.
     revision: str = ''
 
+    # The directory inside the repository holding the tool's project, for a
+    # uv workspace member installed with `#subdirectory=`. Empty at the root.
+    subdirectory: str = ''
+
     extras: tuple[str, ...] = ()
 
     # The receipt's other requirements, from `--with` and `--with-editable`, as
@@ -157,9 +161,9 @@ def read_installation(tool: str) -> Installation:
         else:
             rebuilt.append(line)
 
-    def installed_as(kind: InstallKind, url: str = '', revision: str = '') -> Installation:
+    def installed_as(kind: InstallKind, url: str = '', revision: str = '', subdirectory: str = '') -> Installation:
         extras = tuple(own.get('extras') or ())
-        return Installation(tool, kind, url, revision, extras, tuple(rebuilt), _source_flags(recorded), tuple(unrebuildable))
+        return Installation(tool, kind, url, revision, subdirectory, extras, tuple(rebuilt), _source_flags(recorded), tuple(unrebuildable))
 
     # A local checkout, however uv spelled it. Reinstalling one would
     # discard the working copy the user is developing against.
@@ -170,7 +174,8 @@ def read_installation(tool: str) -> Installation:
     git = own.get('git')
     if git:
         url, query, _ = _split_git(str(git))
-        return installed_as(InstallKind.GIT, url=url, revision=query.get('rev', ''))
+        subdirectory = query.get('subdirectory') or str(own.get('subdirectory') or '')
+        return installed_as(InstallKind.GIT, url=url, revision=query.get('rev', ''), subdirectory=subdirectory)
 
     return installed_as(InstallKind.INDEX)
 
@@ -328,7 +333,8 @@ def requirement_for(installation: Installation, ref: str) -> str:
     """
     named = f'{installation.tool}[{",".join(installation.extras)}]' if installation.extras else installation.tool
     if installation.kind is InstallKind.GIT:
-        return f'{named} @ git+{installation.url}@{ref}'
+        subdirectory = f'#subdirectory={installation.subdirectory}' if installation.subdirectory else ''
+        return f'{named} @ git+{installation.url}@{ref}{subdirectory}'
     return f'{named}>={ref.removeprefix("v")}'
 
 
@@ -361,13 +367,17 @@ class Pins:
         return flags
 
 
-def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
+def read_lock(url: str, ref: str, *, extras: Sequence[str] = (), package: str = '', subdirectory: str = '') -> Pins | None:
     """What the `uv.lock` at `ref` of a git repository pins, or None when it has none.
 
     `extras` are the extras the tool is installed with. Each is passed to
     `uv export` as `--extra`, since a default export leaves an extra's
     dependencies out. `--all-extras` fails on a project that declares two
     extras as conflicting.
+
+    `subdirectory` names a uv workspace member, whose lock sits at the
+    repository root. The export then takes only `package`'s dependencies, and
+    the extras walk starts at that member.
 
     Reads a shallow clone of the one ref and lets `uv export` interpret the lock.
     The lock is also read directly for one thing the export drops: the extras
@@ -400,7 +410,8 @@ def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
         lock = checkout / LOCK_NAME
         if not lock.is_file():
             return None
-        export = [uv, *EXPORT, *chain.from_iterable(('--extra', extra) for extra in extras)]
+        member = ('--package', package) if subdirectory and package else ()
+        export = [uv, *EXPORT, *member, *chain.from_iterable(('--extra', extra) for extra in extras)]
         try:
             exported = run_command(export, cwd=checkout, timeout=LOCK_READ_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired as error:
@@ -408,14 +419,14 @@ def read_lock(url: str, ref: str, *, extras: Sequence[str] = ()) -> Pins | None:
         if exported.returncode != 0:
             raise LockUnreadableError(f'uv export would not read the uv.lock at {ref}: {_reason(exported)}')
         try:
-            requested = _override_extras(tomllib.loads(lock.read_text(encoding='utf-8')), extras)
+            requested = _override_extras(tomllib.loads(lock.read_text(encoding='utf-8')), extras, root=subdirectory or '.')
         except (OSError, tomllib.TOMLDecodeError) as error:
             raise LockUnreadableError(f'cannot read the uv.lock at {ref}: {error}') from error
     return _pins_from_export(exported.stdout, requested)
 
 
-def _override_extras(lock: dict, extras: Sequence[str]) -> dict[str, tuple[str, ...]]:
-    """The extras requested of each package, walking dependency edges from the project at the lock's root.
+def _override_extras(lock: dict, extras: Sequence[str], root: str = '.') -> dict[str, tuple[str, ...]]:
+    """The extras requested of each package, walking dependency edges from the project at `root` in the lock.
 
     An override replaces a requirement whole, extras included, and `uv export`
     writes `gitdep @ git+...` where the tool declared `gitdep[x] @ git+...`.
@@ -430,7 +441,7 @@ def _override_extras(lock: dict, extras: Sequence[str]) -> dict[str, tuple[str, 
     packages: dict[str, list[dict]] = {}
     for package in lock.get('package') or []:
         packages.setdefault(package.get('name', ''), []).append(package)
-    project = ({'editable': '.'}, {'virtual': '.'})
+    project = ({'editable': root}, {'virtual': root})
     roots: list[str] = []
     for name, entries in packages.items():
         roots.extend(name for package in entries if package.get('source') in project)

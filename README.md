@@ -207,6 +207,11 @@ later `uv tool upgrade` stays held to them.
 | Carries none | Installs unlocked and sets `lock_missing`. `lock_warning` names the tag, and `run_update` and `update_and_reexec` print it |
 | Will not clone, uv will not export its lock, or git or uv is not on `PATH` | Raises `LockUnreadableError` and installs nothing |
 
+A tool that is one member of a uv workspace installs as
+`git+<repo>@<tag>#subdirectory=<member>`. `update` keeps the subdirectory, and
+reads the workspace's one `uv.lock` at the repository root for that member's
+dependencies alone.
+
 An update reinstalls the tool's own extras, as in `mytool[fast]`, with their
 dependencies held to the lock. Every `--with` and `--with-editable`
 requirement is passed back to uv as well.
