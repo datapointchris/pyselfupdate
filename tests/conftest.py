@@ -20,6 +20,7 @@ from pyselfupdate import state
 from pyselfupdate.errors import NoReleaseError
 from pyselfupdate.install import Installation
 from pyselfupdate.install import Pins
+from pyselfupdate.notifier import CI_VARIABLES
 from pyselfupdate.source import Release
 
 # Every variable that can change what the gate decides. Cleared before each test
@@ -28,11 +29,7 @@ from pyselfupdate.source import Release
 GATE_VARIABLES = (
     'NO_AUTO_UPDATE',
     'AUTO_UPDATE_INTERVAL',
-    'CI',
-    'BUILD_NUMBER',
-    'RUN_ID',
-    'GITHUB_ACTIONS',
-    'CODESPACES',
+    *CI_VARIABLES,
     'GITHUB_TOKEN',
     'GH_TOKEN',
 )

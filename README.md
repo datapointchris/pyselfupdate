@@ -102,7 +102,7 @@ Nothing is printed when any of these hold:
 | `NO_AUTO_UPDATE` or `MYTOOL_NO_AUTO_UPDATE` is set | Opted out |
 | `--help` or `-h` comes before any `--` on the command line | typer runs the callback even for a subcommand's help screen, which is not work |
 | stdout or stderr is not a terminal | `mytool list > out 2>&1` must stay clean |
-| `CI`, `BUILD_NUMBER`, `RUN_ID`, `GITHUB_ACTIONS` or `CODESPACES` is set | Not a human |
+| A variable in `pyselfupdate.notifier.CI_VARIABLES`, such as `CI`, is set | Not a human |
 | Installed from a local path, an editable checkout, a branch or a commit | Nothing to compare against |
 | Checked within the interval | One request per interval, not per invocation |
 

@@ -20,6 +20,7 @@ from conftest import written_state
 from pyselfupdate import Config
 from pyselfupdate import notify
 from pyselfupdate.errors import SourceError
+from pyselfupdate.notifier import CI_VARIABLES
 from pyselfupdate.notifier import Skip
 from pyselfupdate.notifier import enabled
 from pyselfupdate.notifier import is_interactive
@@ -122,7 +123,7 @@ def test_the_kill_switch_is_presence_only(
     assert source.calls == 0
 
 
-@pytest.mark.parametrize('variable', ['CI', 'BUILD_NUMBER', 'RUN_ID', 'GITHUB_ACTIONS', 'CODESPACES'])
+@pytest.mark.parametrize('variable', CI_VARIABLES)
 def test_ci_is_never_notified(pinned, state_home: Path, out, monkeypatch: pytest.MonkeyPatch, variable: str) -> None:
     monkeypatch.setenv(variable, '1')
     source = StubSource(tag='v2.0.0')
