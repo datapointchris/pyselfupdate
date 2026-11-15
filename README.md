@@ -26,8 +26,9 @@ uv add pyselfupdate            # the library alone, with no dependencies
 uv add 'pyselfupdate[typer]'   # adds typer and the ready-made `update` command
 ```
 
-Python 3.11 is the floor. It is the first release carrying `tomllib`, which
-reads uv's receipt and lock without a TOML dependency.
+The supported Python versions are `requires-python` in `pyproject.toml`, which
+uv checks before it installs. The floor is the first release carrying
+`tomllib`.
 
 ## Starting from scratch
 
