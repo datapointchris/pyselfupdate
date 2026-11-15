@@ -115,6 +115,12 @@ each variable is its name uppercased, with `-` written as `_`.
 A command writing into a pager, a log or a structured-output mode calls
 `notify(config, interactive=False)`. Nothing about the streams reveals that.
 
+The line names `mytool update` by default. A tool that registers the command
+under another name passes the same name, as in
+`add_update_command(app, CONFIG, name='self-update')` beside
+`notify(CONFIG, update_command='self-update')`. A tool with no update command
+passes `update_command=None`, and the line ends after the versions.
+
 ## `update` — rebuilds the environment it runs in, so it runs last
 
 `update` runs `uv tool install --force`, which rebuilds the virtual environment

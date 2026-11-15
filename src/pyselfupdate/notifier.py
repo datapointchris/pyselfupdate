@@ -71,6 +71,7 @@ def notify(
     out: TextIO | None = None,
     defer: bool = True,
     interactive: bool | None = None,
+    update_command: str | None = 'update',
 ) -> Outcome:
     """Check at most once per interval and print one line when behind.
 
@@ -86,9 +87,24 @@ def notify(
     already knows it is writing somewhere a human will not read -- into a pager,
     a log, a structured-output mode -- since nothing about the streams
     themselves reveals that.
+
+    `update_command` is the subcommand the notice tells the reader to run, as
+    in `<tool> <update_command>`. Pass the name given to `add_update_command`
+    when it is not `update`, or None for a tool with no update command, which
+    prints the notice without a hint. This layer cannot see the consumer's
+    command tree, so the consumer names the verb rather than the library
+    guessing one. A hint naming a command the tool lacks costs the reader a
+    failed retry at the moment they act on it.
     """
     try:
-        return _notify(config, interval=interval, out=out, defer=defer, interactive=interactive)
+        return _notify(
+            config,
+            interval=interval,
+            out=out,
+            defer=defer,
+            interactive=interactive,
+            update_command=update_command,
+        )
     except SelfUpdateError:
         return Outcome(skip=Skip.FAILED)
     except Exception:  # noqa: BLE001 - a notice may never break the caller
@@ -143,6 +159,7 @@ def _notify(
     out: TextIO | None,
     defer: bool,
     interactive: bool | None,
+    update_command: str | None,
 ) -> Outcome:
     resolved = config.resolved()
     tool = resolved.tool
@@ -177,7 +194,9 @@ def _notify(
     if not result.update_available:
         return Outcome(checked=True, current=result.current, latest=result.latest)
 
-    message = f'{tool} {result.latest} available (running {result.current}) — run `{tool} update`'
+    message = f'{tool} {result.latest} available (running {result.current})'
+    if update_command:
+        message += f' — run `{tool} {update_command}`'
     _emit(message, out=out, defer=defer)
     return Outcome(checked=True, current=result.current, latest=result.latest)
 
