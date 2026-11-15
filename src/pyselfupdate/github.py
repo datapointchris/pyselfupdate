@@ -1,12 +1,9 @@
 """GitHub as a release source.
 
-Uses `urllib.request` rather than httpx2. The package makes one JSON request and
-downloads nothing, and tools with no HTTP client of their own take it for
-self-update, so a client library would land in their dependency tree for this
-one call. `_CredentialScopedRedirects` covers the redirect hazard a client would.
-
-It moves to httpx2 when this package needs a second request shape: a client
-object, streaming, an asset download.
+Uses `urllib.request`, because the package has no runtime dependencies. The
+HTTP client weighed against that, and when to revisit it, are under the
+zero-dependency constraint in the repository's CLAUDE.md.
+`_CredentialScopedRedirects` covers the redirect hazard a client would.
 """
 
 from __future__ import annotations
