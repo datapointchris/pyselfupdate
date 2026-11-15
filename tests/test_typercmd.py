@@ -10,6 +10,8 @@ test runner down with it.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 import typer
 from conftest import StubIndex
@@ -216,3 +218,34 @@ def test_an_unreadable_lock_exits_non_zero_having_installed_nothing(pinned, inst
     assert raised.value.__cause__ is lock.error
     assert not installs
     assert not exits
+
+
+@pytest.mark.parametrize('markup_mode', [None, 'rich', 'markdown'])
+def test_every_leaf_the_command_registers_carries_an_example(markup_mode: typer.core.MarkupMode) -> None:
+    """A reader who reached the command by tab-completion copies its example, so each leaf needs one.
+
+    Reads the `help` field the screen is built from, under each markup mode
+    `update_help` lays out differently.
+    """
+    app = typer.Typer(rich_markup_mode=markup_mode)
+
+    @app.callback()
+    def root() -> None:
+        """A group, so the update command is a leaf under it as in a real CLI."""
+
+    typercmd.add_update_command(app, Config(tool='demo', owner='x'))
+
+    leaves: list[tuple[str, str]] = []
+
+    def walk(command: Any, path: str) -> None:
+        if isinstance(command, typer.core.TyperGroup):
+            for name, child in command.commands.items():
+                walk(child, f'{path} {name}')
+            return
+        leaves.append((path, command.help or ''))
+
+    walk(typer.main.get_command(app), 'demo')
+
+    # Without this, a walk that stops reaching the tree passes having read nothing.
+    assert leaves
+    assert [path for path, help_text in leaves if 'Examples:' not in help_text] == []
