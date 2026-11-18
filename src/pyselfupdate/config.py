@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
+from dataclasses import fields
+from dataclasses import replace
 
 from pyselfupdate.errors import InvalidConfigError
 from pyselfupdate.github import GitHubSource
@@ -92,31 +94,25 @@ class Config:
         if source is None:
             if not owner:
                 raise InvalidConfigError('owner is required without a custom source')
-            built = GitHubSource(
-                owner=owner,
-                repo=repo,
-                token=self.token,
-                token_func=self.token_func,
-                timeout=self.timeout,
-                allow_prerelease=self.allow_prerelease,
-                tag_prefix=self.tag_prefix,
-            )
+            settings = {name: getattr(self, name) for name in _GITHUB_SETTINGS}
+            settings['repo'] = repo
+            built = GitHubSource(**settings)
             if built != self._github:
                 self._github = built
             source = self._github
 
         package = self.package or self.tool
-        return Config(
-            tool=self.tool,
-            owner=owner,
+        return replace(
+            self,
             repo=repo,
             package=package,
             version=self.version or current_version(package),
-            token=self.token,
-            token_func=self.token_func,
-            timeout=self.timeout,
-            allow_prerelease=self.allow_prerelease,
-            tag_prefix=self.tag_prefix,
             source=source,
             metadata=self.metadata.copy(),
         )
+
+
+# The settings the default GitHubSource takes from a Config: every field the two
+# declare alike, so a setting added to both reaches the source without being
+# named again here.
+_GITHUB_SETTINGS = frozenset(f.name for f in fields(GitHubSource) if f.init) & frozenset(f.name for f in fields(Config) if f.init)
