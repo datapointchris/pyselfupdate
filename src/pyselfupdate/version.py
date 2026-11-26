@@ -16,8 +16,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-IDENTIFIER_PATTERN = re.compile(r'^[0-9A-Za-z-]+$')
-NUMERIC_PATTERN = re.compile(r'^[0-9]+$')
+# Each is applied with `fullmatch`, because `$` also matches before a trailing newline.
+IDENTIFIER_PATTERN = re.compile(r'[0-9A-Za-z-]+')
+NUMERIC_PATTERN = re.compile(r'[0-9]+')
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,7 @@ def parse(text: str) -> Version | None:
 
 def parse_numeric(field: str) -> int | None:
     """A numeric component, rejecting the leading zeros the spec disallows."""
-    if not NUMERIC_PATTERN.match(field):
+    if not NUMERIC_PATTERN.fullmatch(field):
         return None
     if len(field) > 1 and field[0] == '0':
         return None
@@ -79,10 +80,10 @@ def is_valid_prerelease(prerelease: str) -> bool:
     if not prerelease:
         return False
     for identifier in prerelease.split('.'):
-        if not IDENTIFIER_PATTERN.match(identifier):
+        if not IDENTIFIER_PATTERN.fullmatch(identifier):
             return False
         # A numeric identifier may not carry leading zeros.
-        if NUMERIC_PATTERN.match(identifier) and len(identifier) > 1 and identifier[0] == '0':
+        if NUMERIC_PATTERN.fullmatch(identifier) and len(identifier) > 1 and identifier[0] == '0':
             return False
     return True
 
@@ -157,8 +158,8 @@ def compare_prerelease(a: str, b: str) -> int:
 
 
 def compare_identifier(a: str, b: str) -> int:
-    a_numeric = bool(NUMERIC_PATTERN.match(a))
-    b_numeric = bool(NUMERIC_PATTERN.match(b))
+    a_numeric = bool(NUMERIC_PATTERN.fullmatch(a))
+    b_numeric = bool(NUMERIC_PATTERN.fullmatch(b))
 
     if a_numeric and b_numeric:
         # Compared as integers rather than strings so that 2 ranks below 11.

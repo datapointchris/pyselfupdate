@@ -49,6 +49,8 @@ def test_parses_valid_versions(text: str, expected: tuple) -> None:
         '1.2.3-rc..1',
         '1.2.3-rc.01',
         '1.2.3-rc!',
+        'v1.2.3\n',
+        '1.2.3-rc\n',
     ],
 )
 def test_rejects_invalid_versions(text: str) -> None:
